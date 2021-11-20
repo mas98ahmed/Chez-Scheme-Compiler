@@ -173,7 +173,7 @@ and nt_boolean str =
   nt str
 and nt_char_simple str = 
   let ch_simp = const (fun ch -> ch > ' ')  in
-  let ch_simp = not_followed_by ch_simp ch_simp in
+  let ch_simp = not_followed_by ch_simp nt_symbol_char in
   ch_simp str
 and make_named_char char_name ch = 
   let ch_name = pack (word_ci char_name) (fun _ -> ch) in
