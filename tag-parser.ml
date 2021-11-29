@@ -156,9 +156,45 @@ let reserved_word_list =
 
 let rec tag_parse_expression sexpr =
 let sexpr = macro_expand sexpr in
-match sexpr with 
+match sexpr with
+| ScmNil(_)-> ScmConst(ScmNil)
+| ScmBoolean(_) ->ScmConst(ScmBoolean(sexpr))
+| ScmChar(_) -> ScmConst(ScmChar(sexpr))
+| ScmNumber(_) -> ScmConst(ScmNumber(sexpr))
+| ScmString(_) -> ScmConst(ScmString(sexpr))
+| ScmPair(ScmSymbol("quote"),ScmPair(sexprs,ScmNil)) -> ScmConst(sexprs)
+| ScmSymbol(str) -> make_var str
+| ScmPair(ScmSymbol("if") ,sexprs) -> make_if_exp sexprs
+| ScmPair(ScmSymbol("or") ,sexprs) -> make_or_exp sexprs
+| ScmPair(ScmSymbol("lambda") ,sexprs) -> make_lambda_exp sexprs
+| ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
+| ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs
+
+
+
 (* Implement tag parsing here *)
 | _ -> raise (X_syntax_error (sexpr, "Sexpr structure not recognized"))
+
+and make_var str =
+    if List.mem str reserved_word_list then raise (X_reserved_word(str))
+    else ScmVar(str)
+
+and make_if_exp sexprs =
+    match sexprs with
+    |ScmPair(test,ScmPair(dit,ScmPair(dif , ScmNil))) -> ScmIf(tag_parse_expression test,tag_parse_expression dit ,tag_parse_expression dif)
+    |ScmPair(test,ScmPair(dit,ScmNil)) -> ScmIf(tag_parse_expression test,tag_parse_expression dit , ScmConst(ScmVoid))
+    |_ -> raise (X_syntax_error(sexprs ,"wrong if_expr !"))
+
+and make_or_exp sexprs =
+    if !(scm_is_list sexprs) then raise X_syntax_error(sexprs, "Wrong orExpr")
+    else
+    let lst = scm_list_to_list sexprs in
+    let or_exp_len = List.length lst  in
+    match or_exp_len with
+    | 0 -> ScmConst(ScmBoolean(false))
+    | 1 -> tag_parse_expression lst[0]
+    | _ -> ScmOr(List.map tag_parse_expression lst)
+
 
 and macro_expand sexpr =
 match sexpr with
