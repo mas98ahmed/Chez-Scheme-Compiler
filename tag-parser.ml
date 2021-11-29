@@ -157,18 +157,18 @@ let reserved_word_list =
 let rec tag_parse_expression sexpr =
 let sexpr = macro_expand sexpr in
 match sexpr with
-| ScmNil(_)-> ScmConst(ScmNil)
-| ScmBoolean(_) ->ScmConst(ScmBoolean(sexpr))
-| ScmChar(_) -> ScmConst(ScmChar(sexpr))
-| ScmNumber(_) -> ScmConst(ScmNumber(sexpr))
-| ScmString(_) -> ScmConst(ScmString(sexpr))
+| ScmNil-> ScmConst(ScmNil)
+| ScmBoolean(_) ->ScmConst(sexpr)
+| ScmChar(_) -> ScmConst(sexpr)
+| ScmNumber(_) -> ScmConst(sexpr)
+| ScmString(_) -> ScmConst(sexpr)
 | ScmPair(ScmSymbol("quote"),ScmPair(sexprs,ScmNil)) -> ScmConst(sexprs)
-| ScmSymbol(str) -> make_var str
+| ScmSymbol(str)-> make_var str
 | ScmPair(ScmSymbol("if") ,sexprs) -> make_if_exp sexprs
 | ScmPair(ScmSymbol("or") ,sexprs) -> make_or_exp sexprs
-| ScmPair(ScmSymbol("lambda") ,sexprs) -> make_lambda_exp sexprs
+(* | ScmPair(ScmSymbol("lambda") ,sexprs) -> make_lambda_exp sexprs
 | ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
-| ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs
+| ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs *)
 
 
 
@@ -186,13 +186,13 @@ and make_if_exp sexprs =
     |_ -> raise (X_syntax_error(sexprs ,"wrong if_expr !"))
 
 and make_or_exp sexprs =
-    if !(scm_is_list sexprs) then raise X_syntax_error(sexprs, "Wrong orExpr")
+    if (scm_is_list sexprs)==false then raise (X_syntax_error(sexprs,"Wrong orExpr"))
     else
     let lst = scm_list_to_list sexprs in
     let or_exp_len = List.length lst  in
     match or_exp_len with
     | 0 -> ScmConst(ScmBoolean(false))
-    | 1 -> tag_parse_expression lst[0]
+    | 1 -> tag_parse_expression (List.hd lst)
     | _ -> ScmOr(List.map tag_parse_expression lst)
 
 
