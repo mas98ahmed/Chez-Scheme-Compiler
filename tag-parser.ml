@@ -174,8 +174,8 @@ match sexpr with
 | ScmPair(ScmSymbol("if") ,sexprs) -> make_if_exp sexprs
 | ScmPair(ScmSymbol("or") ,sexprs) -> make_or_exp sexprs
 | ScmPair(ScmSymbol("lambda") ,sexprs) -> make_lambda_exp sexprs
-(* | ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
-| ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs *)
+| ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
+(* | ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs *)
 
 
 
