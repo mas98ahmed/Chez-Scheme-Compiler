@@ -52,6 +52,13 @@ let rec scm_list_to_list = function
 | ScmNil -> []
 | sexpr -> raise (X_syntax_error (sexpr, "Expected proper list"));;
 
+(* added by me *)
+let rec scm_improper_list_to_list = function
+| ScmPair(ScmSymbol(hd), ScmSymbol(tl)) -> hd::tl::[]
+| ScmPair (ScmSymbol(hd), tl) -> hd::(scm_improper_list_to_list tl)
+| sexpr -> raise (X_syntax_error (sexpr, "Expected improper list"));;
+(* ***************** *)
+
 let rec scm_is_list = function
 | ScmPair (hd, tl) -> scm_is_list tl
 | ScmNil -> true
@@ -215,20 +222,13 @@ and make_lambda_exp sexprs =
                                                                 | _ -> ScmSeq(List.map tag_parse_expression (scm_list_to_list sexpr))))
                                                                   
                             | false -> ScmLambdaOpt(
-                            (let lst = scm_list_to_list sexpr in
+                            (let lst = scm_improper_list_to_list args in
                             match (List.rev lst) with
-                                | var::argus -> List.map (fun sym -> match sym with
-                                                | ScmSymbol(str) -> str
-                                                | _ -> raise (X_syntax_error (sexpr,"not proper")))
-                                                (List.rev argus)
+                                | var::argus -> List.rev argus
                                 | _ -> raise (X_syntax_error (sexpr,"not proper")))
-                            ,(let lst = scm_list_to_list sexpr in
+                            ,(let lst = scm_improper_list_to_list args in
                             match (List.rev lst) with
-                                | var::argus -> begin
-                                                match var with
-                                                | ScmSymbol(str) -> str
-                                                | var -> raise (X_syntax_error (sexpr,"not proper"))
-                                                end
+                                | var::argus -> var
                                 | _ -> raise (X_syntax_error (sexpr,"not proper")))
                             ,(let lst = scm_list_to_list sexpr in
                             match (List.length lst) with
