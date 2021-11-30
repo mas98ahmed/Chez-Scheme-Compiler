@@ -157,18 +157,18 @@ let reserved_word_list =
 let rec tag_parse_expression sexpr =
 let sexpr = macro_expand sexpr in
 match sexpr with
-| ScmNil(_)-> ScmConst(ScmNil)
-| ScmBoolean(_) ->ScmConst(ScmBoolean(sexpr))
-| ScmChar(_) -> ScmConst(ScmChar(sexpr))
-| ScmNumber(_) -> ScmConst(ScmNumber(sexpr))
-| ScmString(_) -> ScmConst(ScmString(sexpr))
+| ScmNil-> ScmConst(ScmNil)
+| ScmBoolean(_) ->ScmConst(sexpr)
+| ScmChar(_) -> ScmConst(sexpr)
+| ScmNumber(_) -> ScmConst(sexpr)
+| ScmString(_) -> ScmConst(sexpr)
 | ScmPair(ScmSymbol("quote"),ScmPair(sexprs,ScmNil)) -> ScmConst(sexprs)
-| ScmSymbol(str) -> make_var str
+| ScmSymbol(str)-> make_var str
 | ScmPair(ScmSymbol("if") ,sexprs) -> make_if_exp sexprs
 | ScmPair(ScmSymbol("or") ,sexprs) -> make_or_exp sexprs
 | ScmPair(ScmSymbol("lambda") ,sexprs) -> make_lambda_exp sexprs
-| ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
-| ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs
+(* | ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
+| ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs *)
 
 
 
@@ -192,15 +192,57 @@ and make_if_exp sexprs =
     |_ -> raise (X_syntax_error(sexprs ,"Wrong if_expr !"))
 
 and make_or_exp sexprs =
-    if !(scm_is_list sexprs) then raise X_syntax_error(sexprs, "Wrong orExpr")
+    if (scm_is_list sexprs)==false then raise (X_syntax_error(sexprs,"Wrong orExpr"))
     else
     let lst = scm_list_to_list sexprs in
     let or_exp_len = List.length lst  in
     match or_exp_len with
     | 0 -> ScmConst(ScmBoolean(false))
-    | 1 -> tag_parse_expression lst[0]
+    | 1 -> tag_parse_expression (List.hd lst)
     | _ -> ScmOr(List.map tag_parse_expression lst)
 
+and make_lambda_exp sexprs = 
+    match sexprs with
+    | ScmPair(ScmSymbol(str),sexpr)-> ScmLambdaOpt([],str,let lst = scm_list_to_list sexpr in
+                                                                  match (List.length lst) with
+                                                                  | 0 -> raise (X_syntax_error (sexpr,"not proper"))
+                                                                  | 1 -> tag_parse_expression (List.hd lst)
+                                                                  | _ -> ScmSeq(List.map tag_parse_expression lst))
+    
+    | ScmPair(args,sexpr)-> begin
+                            match (scm_is_list args) with
+                            | true -> ScmLambdaSimple((List.map (fun sym -> match sym with 
+                                                                            | ScmSymbol(str)->str
+                                                                            |_-> raise (X_syntax_error (sexpr,"not proper"))) 
+                                                                    (scm_list_to_list args)),
+                                                                (match (List.length (scm_list_to_list sexpr)) with
+                                                                | 0 -> raise (X_syntax_error (sexpr,"not proper"))
+                                                                | 1 -> tag_parse_expression (List.hd (scm_list_to_list sexpr))
+                                                                | _ -> ScmSeq(List.map tag_parse_expression (scm_list_to_list sexpr))))
+                                                                  
+                            | false -> ScmLambdaOpt(
+                            (let lst = scm_list_to_list sexpr in
+                            match (List.rev lst) with
+                                | var::argus -> List.map (fun sym -> match sym with
+                                                | ScmSymbol(str) -> str
+                                                | _ -> raise (X_syntax_error (sexpr,"not proper")))
+                                                (List.rev argus)
+                                | _ -> raise (X_syntax_error (sexpr,"not proper")))
+                            ,(let lst = scm_list_to_list sexpr in
+                            match (List.rev lst) with
+                                | var::argus -> begin
+                                                match var with
+                                                | ScmSymbol(str) -> str
+                                                | var -> raise (X_syntax_error (sexpr,"not proper"))
+                                                end
+                                | _ -> raise (X_syntax_error (sexpr,"not proper")))
+                            ,(let lst = scm_list_to_list sexpr in
+                            match (List.length lst) with
+                                | 0 -> raise (X_syntax_error (sexpr,"not proper"))
+                                | 1 -> tag_parse_expression (List.hd (scm_list_to_list sexpr))
+                                | _ -> ScmSeq(List.map tag_parse_expression (scm_list_to_list sexpr))))
+                            end
+    | _ -> raise (X_syntax_error (sexprs,"not proper"))
 
 and macro_expand sexpr =
 match sexpr with
