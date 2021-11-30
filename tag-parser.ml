@@ -175,6 +175,12 @@ match sexpr with
 (* Implement tag parsing here *)
 | _ -> raise (X_syntax_error (sexpr, "Sexpr structure not recognized"))
 
+and make_define_exp sexprs =
+    match sexprs with
+    | ScmPair(ScmSymbol(var) , body) -> ScmDef(ScmVar(var),tag_parse_expression body)
+    | ScmPair(ScmPair(name , args) , body) -> let all = ScmPair(args,body) in ScmDef(ScmVar(name),make_lambda_exp all)
+                                              
+
 and make_var str =
     if List.mem str reserved_word_list then raise (X_reserved_word(str))
     else ScmVar(str)
@@ -183,7 +189,7 @@ and make_if_exp sexprs =
     match sexprs with
     |ScmPair(test,ScmPair(dit,ScmPair(dif , ScmNil))) -> ScmIf(tag_parse_expression test,tag_parse_expression dit ,tag_parse_expression dif)
     |ScmPair(test,ScmPair(dit,ScmNil)) -> ScmIf(tag_parse_expression test,tag_parse_expression dit , ScmConst(ScmVoid))
-    |_ -> raise (X_syntax_error(sexprs ,"wrong if_expr !"))
+    |_ -> raise (X_syntax_error(sexprs ,"Wrong if_expr !"))
 
 and make_or_exp sexprs =
     if !(scm_is_list sexprs) then raise X_syntax_error(sexprs, "Wrong orExpr")
