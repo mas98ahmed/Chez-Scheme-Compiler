@@ -282,6 +282,13 @@ and make_begin_exp sexprs =
 and macro_expand sexpr =
 match sexpr with
 (* Handle macro expansion patterns here *)
+| ScmPair(ScmSymbol("and"),rest)-> make_and rest
 | _ -> sexpr
-end;; 
 
+and make_and rest =
+    match rest with
+    | ScmNil -> ScmBoolean(true)
+    | ScmPair(expr, ScmNil) -> expr
+    | ScmPair(expr, res) -> ScmPair(ScmSymbol("if"), ScmPair(expr, ScmPair((macro_expand (ScmPair(ScmSymbol("and"), res))), ScmPair(ScmBoolean(false), ScmNil))))
+    | _ -> raise (X_syntax_error(rest, "syntax error"))
+end;;
