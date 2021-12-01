@@ -282,7 +282,8 @@ and make_begin_exp sexprs =
 and macro_expand sexpr =
 match sexpr with
 (* Handle macro expansion patterns here *)
-| ScmPair(ScmSymbol("and"),rest)-> make_and rest
+| ScmPair(ScmSymbol("and"), rest) -> make_and rest
+| ScmPair(ScmSymbol("let"), rest) -> make_let rest
 | _ -> sexpr
 
 and make_and rest =
@@ -291,4 +292,24 @@ and make_and rest =
     | ScmPair(expr, ScmNil) -> expr
     | ScmPair(expr, res) -> ScmPair(ScmSymbol("if"), ScmPair(expr, ScmPair((macro_expand (ScmPair(ScmSymbol("and"), res))), ScmPair(ScmBoolean(false), ScmNil))))
     | _ -> raise (X_syntax_error(rest, "syntax error"))
+
+and make_let rest = 
+    match rest with
+    | ScmPair(args,body) -> begin 
+                            let argus = (List.map (fun arg -> match arg with
+                            | ScmPair(ScmSymbol(str),value) ->  ScmSymbol(str)
+                            | _ -> raise (X_syntax_error(rest,"wrong syntax"))) (scm_list_to_list args)) in
+
+                            let bodies = (match (List.length (scm_list_to_list body)) with
+                            | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
+                            | _ -> body) in
+
+                            let values = (List.map (fun arg -> match arg with
+                            | ScmPair(ScmSymbol(str),ScmPair(value,ScmNil)) ->  value
+                            | _ -> raise (X_syntax_error(rest,"wrong syntax"))) (scm_list_to_list args)) in
+
+                            ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair((list_to_proper_list argus),bodies))
+                            ,(list_to_proper_list values))
+                            end
+    | _ -> raise (X_syntax_error(rest,"wrong syntax"))
 end;;
