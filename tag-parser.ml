@@ -170,9 +170,7 @@ match sexpr with
 | ScmNumber(_) -> ScmConst(sexpr)
 | ScmString(_) -> ScmConst(sexpr)
 | ScmPair(ScmSymbol("quote"),ScmPair(sexprs,ScmNil)) -> ScmConst(sexprs)
-| ScmSymbol(str)-> (match (List.mem str reserved_word_list) with 
-                    | false -> make_var str
-                    | true -> raise (X_reserved_word(str)))
+| ScmSymbol(str)-> make_var str
 | ScmPair(ScmSymbol("if") ,sexprs) -> make_if_exp sexprs
 | ScmPair(ScmSymbol("or") ,sexprs) -> make_or_exp sexprs
 | ScmPair(ScmSymbol("lambda") ,sexprs) -> make_lambda_exp sexprs
@@ -180,9 +178,6 @@ match sexpr with
 | ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs
 | ScmPair(ScmSymbol("begin") ,sexprs) -> make_begin_exp sexprs
 | ScmPair(hd,tl) -> ScmApplic((tag_parse_expression hd), List.map tag_parse_expression (scm_list_to_list tl))
-
-
-
 (* Implement tag parsing here *)
 | _ -> raise (X_syntax_error (sexpr, "Sexpr structure not recognized"))
                                               
@@ -193,9 +188,9 @@ and make_var str =
 
 and make_if_exp sexprs =
     match sexprs with
-    |ScmPair(test,ScmPair(dit,ScmPair(dif , ScmNil))) -> ScmIf(tag_parse_expression test,tag_parse_expression dit ,tag_parse_expression dif)
-    |ScmPair(test,ScmPair(dit,ScmNil)) -> ScmIf(tag_parse_expression test,tag_parse_expression dit , ScmConst(ScmVoid))
-    |_ -> raise (X_syntax_error(sexprs ,"Wrong if_expr !"))
+    | ScmPair(test,ScmPair(dit,ScmPair(dif , ScmNil))) -> ScmIf(tag_parse_expression test,tag_parse_expression dit ,tag_parse_expression dif)
+    | ScmPair(test,ScmPair(dit,ScmNil)) -> ScmIf(tag_parse_expression test,tag_parse_expression dit , ScmConst(ScmVoid))
+    | _ -> raise (X_syntax_error(sexprs ,"Wrong if_expr !"))
 
 and make_or_exp sexprs =
     if (scm_is_list sexprs)==false then raise (X_syntax_error(sexprs,"Wrong orExpr"))
@@ -284,24 +279,28 @@ match sexpr with
 (* Handle macro expansion patterns here *)
 | ScmPair(ScmSymbol("and"), rest) -> make_and rest
 | ScmPair(ScmSymbol("let"), rest) -> make_let rest
+| ScmPair(ScmSymbol("let*"), rest) -> make_let_star rest
+(* | ScmPair(ScmSymbol("letrec"), rest) -> make_letrec rest *)
 | _ -> sexpr
 
 and make_and rest =
     match rest with
     | ScmNil -> ScmBoolean(true)
     | ScmPair(expr, ScmNil) -> expr
-    | ScmPair(expr, res) -> ScmPair(ScmSymbol("if"), ScmPair(expr, ScmPair((macro_expand (ScmPair(ScmSymbol("and"), res))), ScmPair(ScmBoolean(false), ScmNil))))
+    | ScmPair(expr, res) -> ScmPair(ScmSymbol("if"), ScmPair(expr, ScmPair((macro_expand (ScmPair(ScmSymbol("and"), res))),
+                                 ScmPair(ScmBoolean(false), ScmNil))))
     | _ -> raise (X_syntax_error(rest, "syntax error"))
 
-and make_let rest = 
+and make_let rest =
     match rest with
     | ScmPair(args,body) -> begin 
+                            (* let a = raise ((X_syntax_error(args,"let fun"))) in *)
                             let argus = (List.map (fun arg -> match arg with
                             | ScmPair(ScmSymbol(str),value) ->  ScmSymbol(str)
-                            | _ -> raise (X_syntax_error(rest,"wrong syntax"))) (scm_list_to_list args)) in
+                            | _ -> raise (X_syntax_error(arg,"sswrong syntax"))) (scm_list_to_list args)) in
 
                             let bodies = (match (List.length (scm_list_to_list body)) with
-                            | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
+                            | 0 -> raise (X_syntax_error(rest,"ddwrong syntax"))
                             | _ -> body) in
 
                             let values = (List.map (fun arg -> match arg with
@@ -311,5 +310,24 @@ and make_let rest =
                             ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair((list_to_proper_list argus),bodies))
                             ,(list_to_proper_list values))
                             end
+    | _ -> raise (X_syntax_error(rest,"aawrong syntax"))
+
+and make_let_star rest = 
+    match rest with
+    | ScmPair(args, body) -> begin
+                                match (List.length (scm_list_to_list args)) with
+                                | 0 -> (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(ScmNil,body))))
+                                | 1 -> (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(args,body))))
+                                | _ -> begin
+                                        let head_args = ScmPair((List.hd (scm_list_to_list args)),ScmNil) in
+                                        let tail_args = (list_to_proper_list (List.tl (scm_list_to_list args))) in
+                                        let bod = (macro_expand (ScmPair(ScmSymbol("let*"),ScmPair(tail_args,body)))) in
+                                        (* let tail = raise (X_syntax_error(head_args,"")) in *)
+                                        (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(head_args,ScmPair(bod,ScmNil)))))
+                                        end
+                                end
     | _ -> raise (X_syntax_error(rest,"wrong syntax"))
+
+(* and make_letrec rest = 
+     *)
 end;;
