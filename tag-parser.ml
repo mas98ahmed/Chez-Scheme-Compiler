@@ -262,7 +262,7 @@ and make_set_exp sexprs =
                                 match (List.length (List.tl lst)) with
                                 | 1 -> tag_parse_expression (List.hd (List.tl lst))
                                 | _ -> raise (X_syntax_error(sexprs,"wrong syntax")))
-                | _ -> raise (X_syntax_error(sexprs,"Expected variable on LHS of set!"))
+                | _ -> raise (X_syntax_error((List.hd lst),"Expected variable on LHS of set!"))
             end
     | false -> raise (X_syntax_error(sexprs,"wrong syntax"))
 
@@ -280,7 +280,7 @@ match sexpr with
 | ScmPair(ScmSymbol("and"), rest) -> make_and rest
 | ScmPair(ScmSymbol("let"), rest) -> make_let rest
 | ScmPair(ScmSymbol("let*"), rest) -> make_let_star rest
-(* | ScmPair(ScmSymbol("letrec"), rest) -> make_letrec rest *)
+| ScmPair(ScmSymbol("letrec"), rest) -> make_letrec rest
 | _ -> sexpr
 
 and make_and rest =
@@ -294,23 +294,22 @@ and make_and rest =
 and make_let rest =
     match rest with
     | ScmPair(args,body) -> begin 
-                            (* let a = raise ((X_syntax_error(args,"let fun"))) in *)
                             let argus = (List.map (fun arg -> match arg with
                             | ScmPair(ScmSymbol(str),value) ->  ScmSymbol(str)
-                            | _ -> raise (X_syntax_error(arg,"sswrong syntax"))) (scm_list_to_list args)) in
+                            | _ -> raise (X_syntax_error(arg,"wrong syntax"))) (scm_list_to_list args)) in
 
                             let bodies = (match (List.length (scm_list_to_list body)) with
-                            | 0 -> raise (X_syntax_error(rest,"ddwrong syntax"))
+                            | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
                             | _ -> body) in
 
                             let values = (List.map (fun arg -> match arg with
                             | ScmPair(ScmSymbol(str),ScmPair(value,ScmNil)) ->  value
-                            | _ -> raise (X_syntax_error(rest,"wrong syntax"))) (scm_list_to_list args)) in
+                            | _ -> raise (X_syntax_error(arg,"sswrong syntax"))) (scm_list_to_list args)) in
 
                             ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair((list_to_proper_list argus),bodies))
                             ,(list_to_proper_list values))
                             end
-    | _ -> raise (X_syntax_error(rest,"aawrong syntax"))
+    | _ -> raise (X_syntax_error(rest,"wrong syntax"))
 
 and make_let_star rest = 
     match rest with
@@ -322,12 +321,34 @@ and make_let_star rest =
                                         let head_args = ScmPair((List.hd (scm_list_to_list args)),ScmNil) in
                                         let tail_args = (list_to_proper_list (List.tl (scm_list_to_list args))) in
                                         let bod = (macro_expand (ScmPair(ScmSymbol("let*"),ScmPair(tail_args,body)))) in
-                                        (* let tail = raise (X_syntax_error(head_args,"")) in *)
                                         (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(head_args,ScmPair(bod,ScmNil)))))
                                         end
                                 end
     | _ -> raise (X_syntax_error(rest,"wrong syntax"))
 
-(* and make_letrec rest = 
-     *)
+and make_letrec rest = 
+    match rest with
+    | ScmPair(args,body) -> begin
+                            let vars = (List.map (fun arg -> match arg with
+                            | ScmPair(ScmSymbol(str),value) ->  ScmSymbol(str)
+                            | _ -> raise (X_syntax_error(arg,"wrong syntax"))) (scm_list_to_list args)) in
+
+                            let vals = (List.map (fun arg -> match arg with
+                            | ScmPair(ScmSymbol(str),value) ->  value
+                            | _ -> raise (X_syntax_error(arg,"wrong syntax"))) (scm_list_to_list args)) in
+
+                            let bod = ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,body)) in
+
+                            let new_vars = (list_to_proper_list (List.map (fun var -> ScmPair(var,ScmPair(ScmPair(ScmSymbol("quote"),
+                                                                                    ScmPair(ScmSymbol("whatever"),ScmNil)),ScmNil))) vars)) in
+                            
+                            let vals = (scm_zip (fun var value -> ScmPair(ScmSymbol("set!"),ScmPair(var,ScmPair(value,ScmNil)))) 
+                                                                    (list_to_proper_list vars) (list_to_proper_list vals)) in
+                            
+                            let bod = (scm_append vals bod) in
+
+                            (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(new_vars,ScmPair(bod,ScmNil)))))
+                            end
+                            
+    | _ -> raise (X_syntax_error(rest,"wrong syntax"))
 end;;
