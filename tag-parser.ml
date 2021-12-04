@@ -1,5 +1,6 @@
 #use "reader.ml";;
 
+
 type expr =
   | ScmConst of sexpr
   | ScmVar of string
@@ -163,6 +164,7 @@ let reserved_word_list =
 
 let rec tag_parse_expression sexpr =
 let sexpr = macro_expand sexpr in
+(* let a = raise (X_syntax_error(sexpr,"tag_parse")) in *)
 match sexpr with
 | ScmNil-> ScmConst(ScmNil)
 | ScmBoolean(_) ->ScmConst(sexpr)
@@ -334,20 +336,22 @@ and make_letrec rest =
                             | _ -> raise (X_syntax_error(arg,"wrong syntax"))) (scm_list_to_list args)) in
 
                             let vals = (List.map (fun arg -> match arg with
-                            | ScmPair(ScmSymbol(str),value) ->  value
+                            | ScmPair(ScmSymbol(str),value) -> value
                             | _ -> raise (X_syntax_error(arg,"wrong syntax"))) (scm_list_to_list args)) in
 
-                            let bod = ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,body)) in
+                            let bod = body in
 
                             let new_vars = (list_to_proper_list (List.map (fun var -> ScmPair(var,ScmPair(ScmPair(ScmSymbol("quote"),
-                                                                                    ScmPair(ScmSymbol("whatever"),ScmNil)),ScmNil))) vars)) in
+                                                                              ScmPair(ScmSymbol("whatever"),ScmNil)),ScmNil))) vars)) in
                             
-                            let vals = (scm_zip (fun var value -> ScmPair(ScmSymbol("set!"),ScmPair(var,ScmPair(value,ScmNil)))) 
+                            let vals = (scm_zip (fun var value -> ScmPair(ScmSymbol("set!"),ScmPair(var,value))) 
                                                                     (list_to_proper_list vars) (list_to_proper_list vals)) in
                             
                             let bod = (scm_append vals bod) in
 
-                            (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(new_vars,ScmPair(bod,ScmNil)))))
+                            (* let a = raise (X_syntax_error(bod,"sa")) in *)
+
+                            (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(new_vars,bod))))
                             end
                             
     | _ -> raise (X_syntax_error(rest,"wrong syntax"))
