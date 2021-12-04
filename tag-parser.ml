@@ -283,7 +283,56 @@ match sexpr with
 | ScmPair(ScmSymbol("let"), rest) -> make_let rest
 | ScmPair(ScmSymbol("let*"), rest) -> make_let_star rest
 | ScmPair(ScmSymbol("letrec"), rest) -> make_letrec rest
+| ScmPair(ScmSymbol("cond"), rest) -> make_cond rest
 | _ -> sexpr
+
+and make_cond rest =
+    let newCond = expand_cond rest in
+    tag_parse_expression newCond
+
+and expand_cond expression =
+    match expression with
+    |ScmPair(ScmPair(test,dit),rest) -> cond_rib1 test dit rest
+    |ScmPair(ScmPair(test,ScmPair(ScmSymbol("->"),ScmPair(body,ScmNil))),rest) -> cond_rib2 test body rest
+    |ScmPair(ScmPair(ScmSymbol("else"),lastExp), _ )  -> ScmPair(ScmSymbol("begin"), lastExp)
+    |_ -> raise (X_syntax_error(expression, "expand_cond error 404 "))
+
+and cond_rib1 test dit rest =
+    match rest with
+    | ScmNil -> ScmPair(ScmSymbol("if"),ScmPair(test,ScmPair(ScmPair(ScmSymbol("begin"),dit),ScmNil)))
+    | _ -> ScmPair(ScmSymbol("if"),
+                        ScmPair(test,
+                            ScmPair(ScmPair(ScmSymbol("begin"),dit),ScmPair(expand_cond rest,ScmNil))))
+
+/*(let ((value test)
+(f (lambda () body))
+(rest (lambda () rest)))
+(if value
+((f) value)
+(rest)))
+*/
+
+and cond_rib2 test body rest =
+    match rest with
+    |ScmNil ->ScmPair(ScmSymbol("let"),ScmPair(ScmPair(
+                          ScmPair(ScmSymbol("value"),ScmPair(test,ScmNil)),
+                          ScmPair(ScmPair(ScmSymbol("f"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(body,ScmNil))),ScmNil)),
+                          ScmPair(ScmPair(ScmSymbol("rest"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(expand_cond rest , ScmNil))),ScmNil)),ScmNil))
+                  ),
+                  ScmPair(ScmPair(ScmSymbol("if"),ScmPair(ScmSymbol("value"),ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),ScmNil)))
+                  ,ScmNil)
+                      ))
+
+
+    | _ ->ScmPair(ScmSymbol("let"),ScmPair(ScmPair(
+            ScmPair(ScmSymbol("value"),ScmPair(test,ScmNil)),
+            ScmPair(ScmPair(ScmSymbol("f"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(body,ScmNil))),ScmNil)),
+            ScmPair(ScmPair(ScmSymbol("rest"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(expand_cond rest , ScmNil))),ScmNil)),ScmNil))
+    ),
+    ScmPair(ScmPair(ScmSymbol("if"),ScmPair(ScmSymbol("value"),ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),ScmPair(ScmPair(ScmSymbol("rest") , ScmNil) , ScmNil))))
+    ,ScmNil)
+        ))
+
 
 and make_and rest =
     match rest with
