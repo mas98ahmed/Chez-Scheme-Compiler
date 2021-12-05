@@ -288,31 +288,55 @@ match sexpr with
 
 and make_cond rest =
     let newCond = expand_cond rest in
-    tag_parse_expression newCond
+    newCond
 
 and expand_cond expression =
     match expression with
-    |ScmPair(ScmPair(test,dit),rest) -> cond_rib1 test dit rest
-    |ScmPair(ScmPair(test,ScmPair(ScmSymbol("->"),ScmPair(body,ScmNil))),rest) -> cond_rib2 test body rest
-    |ScmPair(ScmPair(ScmSymbol("else"),lastExp), _ )  -> ScmPair(ScmSymbol("begin"), lastExp)
-    |_ -> raise (X_syntax_error(expression, "expand_cond error 404 "))
+    | ScmPair(ScmPair(test,dit),rest) -> cond_rib1 test dit rest
+    (* | ScmPair(ScmPair(test,ScmPair(ScmSymbol("->"),ScmPair(body,ScmNil))),rest) -> cond_rib1 test body rest *)
+    (* | ScmPair(ScmPair(ScmSymbol("else"),lastExp), _ )  -> begin ScmPair(ScmSymbol("begin"), lastExp) end *)
+    | _ -> raise (X_syntax_error(expression, "expand_cond error 404 "))
 
 and cond_rib1 test dit rest =
     match rest with
-    | ScmNil -> ScmPair(ScmSymbol("if"),ScmPair(test,ScmPair(ScmPair(ScmSymbol("begin"),dit),ScmNil)))
-    | _ -> ScmPair(ScmSymbol("if"),
+    | ScmNil -> begin
+                match test with 
+                | ScmSymbol("else") -> begin
+                                        (match (List.length (scm_list_to_list (macro_expand dit))) with
+                                        | 0 -> raise (X_syntax_error(dit,"wrong syntax"))
+                                        | 1 ->  (macro_expand (List.hd (scm_list_to_list (dit))))
+                                        | _ -> ScmPair(ScmSymbol("begin"), (macro_expand dit)))
+                                        end
+                | _ -> begin
+                        ScmPair(ScmSymbol("if"),
+                            ScmPair(test,ScmPair((match (List.length (scm_list_to_list (macro_expand dit))) with 
+                                                    | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
+                                                    | 1 -> (macro_expand (List.hd (scm_list_to_list (dit))))
+                                                    | _ -> ScmPair(ScmSymbol("begin"),(macro_expand dit)))
+                                                    ,ScmNil)))
+                        end
+                end
+    | _ -> begin
+            match test with
+            | ScmSymbol("else") -> begin
+                                    (match (List.length (scm_list_to_list (macro_expand dit))) with
+                                        | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
+                                        | 1 -> (macro_expand (List.hd (scm_list_to_list (dit))))
+                                        | _ -> ScmPair(ScmSymbol("begin"), (macro_expand dit)))
+                                    end
+            | _ -> begin 
+                    ScmPair(ScmSymbol("if"),
                         ScmPair(test,
-                            ScmPair(ScmPair(ScmSymbol("begin"),dit),ScmPair(expand_cond rest,ScmNil))))
+                            ScmPair((match (List.length (scm_list_to_list (macro_expand dit))) with 
+                                    | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
+                                    | 1 -> (List.hd (scm_list_to_list (macro_expand dit)))
+                                    | _ -> ScmPair(ScmSymbol("begin"),(macro_expand dit)))
+                                    ,(macro_expand (ScmPair(ScmPair(ScmSymbol("cond"),rest),ScmNil))))))
+                    end
+            end
 
-/*(let ((value test)
-(f (lambda () body))
-(rest (lambda () rest)))
-(if value
-((f) value)
-(rest)))
-*/
 
-and cond_rib2 test body rest =
+(* and cond_rib2 test body rest =
     match rest with
     |ScmNil ->ScmPair(ScmSymbol("let"),ScmPair(ScmPair(
                           ScmPair(ScmSymbol("value"),ScmPair(test,ScmNil)),
@@ -331,14 +355,14 @@ and cond_rib2 test body rest =
     ),
     ScmPair(ScmPair(ScmSymbol("if"),ScmPair(ScmSymbol("value"),ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),ScmPair(ScmPair(ScmSymbol("rest") , ScmNil) , ScmNil))))
     ,ScmNil)
-        ))
+        )) *)
 
 
 and make_and rest =
     match rest with
     | ScmNil -> ScmBoolean(true)
-    | ScmPair(expr, ScmNil) -> expr
-    | ScmPair(expr, res) -> ScmPair(ScmSymbol("if"), ScmPair(expr, ScmPair((macro_expand (ScmPair(ScmSymbol("and"), res))),
+    | ScmPair(expr, ScmNil) -> (macro_expand expr)
+    | ScmPair(expr, res) -> ScmPair(ScmSymbol("if"), ScmPair((macro_expand expr), ScmPair((macro_expand (ScmPair(ScmSymbol("and"), res))),
                                  ScmPair(ScmBoolean(false), ScmNil))))
     | _ -> raise (X_syntax_error(rest, "syntax error"))
 
@@ -351,10 +375,10 @@ and make_let rest =
 
                             let bodies = (match (List.length (scm_list_to_list body)) with
                             | 0 -> raise (X_syntax_error(rest,"wrong syntax"))
-                            | _ -> body) in
+                            | _ -> (macro_expand body)) in
 
                             let values = (List.map (fun arg -> match arg with
-                            | ScmPair(ScmSymbol(str),ScmPair(value,ScmNil)) ->  value
+                            | ScmPair(ScmSymbol(str),ScmPair(value,ScmNil)) ->  (macro_expand value)
                             | _ -> raise (X_syntax_error(arg,"sswrong syntax"))) (scm_list_to_list args)) in
 
                             ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair((list_to_proper_list argus),bodies))
@@ -393,7 +417,7 @@ and make_letrec rest =
                             let new_vars = (list_to_proper_list (List.map (fun var -> ScmPair(var,ScmPair(ScmPair(ScmSymbol("quote"),
                                                                               ScmPair(ScmSymbol("whatever"),ScmNil)),ScmNil))) vars)) in
                             
-                            let vals = (scm_zip (fun var value -> ScmPair(ScmSymbol("set!"),ScmPair(var,value))) 
+                            let vals = (scm_zip (fun var value -> ScmPair(ScmSymbol("set!"),ScmPair(var,(macro_expand value)))) 
                                                                     (list_to_proper_list vars) (list_to_proper_list vals)) in
                             
                             let bod = (scm_append vals bod) in
