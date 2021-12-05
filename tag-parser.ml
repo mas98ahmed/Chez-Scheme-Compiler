@@ -283,6 +283,7 @@ match sexpr with
 | ScmPair(ScmSymbol("letrec"), rest) -> make_letrec rest
 | ScmPair(ScmSymbol("cond"), rest) -> make_cond rest
 | ScmPair(ScmSymbol("define"), rest) -> make_define_macro rest
+|  ScmPair (ScmSymbol ("quasiquote"),ScmPair(rest,ScmNil)) -> make_quasiquote rest
 | _ -> sexpr
 
 and make_define_macro rest = 
@@ -432,6 +433,18 @@ and make_letrec rest =
                             
     | _ -> raise (X_syntax_error(rest,"wrong syntax"))
 
-
-
+and make_quasiquote rest =
+    match rest with
+      | ScmNil ->  ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
+      | ScmSymbol(a)-> ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
+      | ScmPair(ScmSymbol ("unquote"),ScmPair(sexpr,ScmNil)) -> sexpr
+      | ScmPair(ScmSymbol ("unquote-splicing"),ScmPair(sexpr,ScmNil)) -> ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
+      | ScmVector(a) ->  let pairs = (make_quasiquote (list_to_proper_list a)) in
+                      ScmPair(ScmSymbol "list->vector",ScmPair(pairs,ScmNil))
+      | ScmPair((ScmPair((ScmSymbol("unquote-splicing")), (ScmPair(a, ScmNil)))), b) -> 
+              (ScmPair((ScmSymbol("append")),(ScmPair(a, (ScmPair((make_quasiquote b), ScmNil))))))
+      | ScmPair(a, (ScmPair((ScmSymbol("unquote-splicing")), (ScmPair(b, ScmNil))))) ->
+              (ScmPair((ScmSymbol("cons")), (ScmPair((make_quasiquote a), (ScmPair(b, ScmNil))))))
+      | ScmPair(a,b) -> (ScmPair((ScmSymbol("cons")), (ScmPair((make_quasiquote a), (ScmPair((make_quasiquote b), ScmNil))))))
+      | _ -> rest
 end;;
