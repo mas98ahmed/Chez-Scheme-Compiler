@@ -248,10 +248,8 @@ and make_define_exp sexprs =
                                             | 1 -> ScmDef((if (List.mem var reserved_word_list) then raise (X_syntax_error(sexprs,"Expected variable on LHS of define"))
                                             else ScmVar(var)),(tag_parse_expression (List.hd (scm_list_to_list body))))
                                             | _ -> ScmDef((if (List.mem var reserved_word_list) then raise (X_syntax_error(sexprs,"Expected variable on LHS of define"))
-                                            else ScmVar(var)),tag_parse_expression (ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,body))))
+                                            else ScmVar(var)),(tag_parse_expression (ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,body)))))
                                             end
-    | ScmPair(ScmPair(ScmSymbol(var) , args) , body) -> ScmDef((if (List.mem var reserved_word_list) then raise (X_syntax_error(sexprs,"Expected variable on LHS of define"))
-                                            else ScmVar(var)),(tag_parse_expression (ScmPair(ScmSymbol("lambda"),ScmPair(args,body)))))
     | _ -> raise (X_syntax_error(sexprs,"syntax error"))
 
 
@@ -284,7 +282,13 @@ match sexpr with
 | ScmPair(ScmSymbol("let*"), rest) -> make_let_star rest
 | ScmPair(ScmSymbol("letrec"), rest) -> make_letrec rest
 | ScmPair(ScmSymbol("cond"), rest) -> make_cond rest
+| ScmPair(ScmSymbol("define"), rest) -> make_define_macro rest
 | _ -> sexpr
+
+and make_define_macro rest = 
+    ScmPair(ScmSymbol("define"),(match rest with
+    | ScmPair(ScmPair(ScmSymbol(var) , args) , body) -> (ScmPair(ScmSymbol(var),(ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(args,body)),ScmNil))))
+    | _ -> rest))
 
 and make_cond rest =
     let newCond = expand_cond rest in
@@ -292,9 +296,8 @@ and make_cond rest =
 
 and expand_cond expression =
     match expression with
+    | ScmPair(ScmPair(test,ScmPair(ScmSymbol("=>"),body)),rest) -> arrow_cond test body rest
     | ScmPair(ScmPair(test,dit),rest) -> cond_rib1 test dit rest
-    (* | ScmPair(ScmPair(test,ScmPair(ScmSymbol("->"),ScmPair(body,ScmNil))),rest) -> cond_rib1 test body rest *)
-    (* | ScmPair(ScmPair(ScmSymbol("else"),lastExp), _ )  -> begin ScmPair(ScmSymbol("begin"), lastExp) end *)
     | _ -> raise (X_syntax_error(expression, "expand_cond error 404 "))
 
 and cond_rib1 test dit rest =
@@ -335,28 +338,28 @@ and cond_rib1 test dit rest =
                     end
             end
 
-
-(* and cond_rib2 test body rest =
+and arrow_cond test body rest = 
     match rest with
-    |ScmNil ->ScmPair(ScmSymbol("let"),ScmPair(ScmPair(
-                          ScmPair(ScmSymbol("value"),ScmPair(test,ScmNil)),
-                          ScmPair(ScmPair(ScmSymbol("f"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(body,ScmNil))),ScmNil)),
-                          ScmPair(ScmPair(ScmSymbol("rest"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(expand_cond rest , ScmNil))),ScmNil)),ScmNil))
-                  ),
-                  ScmPair(ScmPair(ScmSymbol("if"),ScmPair(ScmSymbol("value"),ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),ScmNil)))
-                  ,ScmNil)
-                      ))
-
-
-    | _ ->ScmPair(ScmSymbol("let"),ScmPair(ScmPair(
-            ScmPair(ScmSymbol("value"),ScmPair(test,ScmNil)),
-            ScmPair(ScmPair(ScmSymbol("f"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(body,ScmNil))),ScmNil)),
-            ScmPair(ScmPair(ScmSymbol("rest"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(expand_cond rest , ScmNil))),ScmNil)),ScmNil))
-    ),
-    ScmPair(ScmPair(ScmSymbol("if"),ScmPair(ScmSymbol("value"),ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),ScmPair(ScmPair(ScmSymbol("rest") , ScmNil) , ScmNil))))
-    ,ScmNil)
-        )) *)
-
+    | ScmNil -> begin
+                macro_expand (ScmPair(ScmSymbol("let"),
+                (ScmPair(ScmPair(ScmPair(ScmSymbol("value"),ScmPair((macro_expand test),ScmNil)),
+                            ScmPair(ScmPair(ScmSymbol("f"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,ScmPair(body,ScmNil))),ScmNil)),
+                            ScmPair(ScmPair(ScmSymbol("rest"),ScmNil),ScmNil))),
+                ScmPair(ScmPair(ScmSymbol("if"),
+                        ScmPair(ScmSymbol("value"),
+                        ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),
+                        ScmPair(ScmPair(ScmSymbol("rest"),ScmNil),ScmNil)))),ScmNil)))))
+                end
+    | _ -> begin
+                macro_expand (ScmPair(ScmSymbol("let"),
+                (ScmPair(ScmPair(ScmPair(ScmSymbol("value"),ScmPair((macro_expand test),ScmNil)),
+                            ScmPair(ScmPair(ScmSymbol("f"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,(macro_expand body))),ScmNil)),
+                            ScmPair(ScmPair(ScmSymbol("rest"),ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair(ScmNil,(macro_expand (ScmPair(ScmPair(ScmSymbol("cond"),rest),ScmNil))))),ScmNil)),ScmNil))),
+                ScmPair(ScmPair(ScmSymbol("if"),
+                        ScmPair(ScmSymbol("value"),
+                        ScmPair(ScmPair(ScmPair(ScmSymbol("f"),ScmNil),ScmPair(ScmSymbol("value"),ScmNil)),
+                        ScmPair(ScmPair(ScmSymbol("rest"),ScmNil),ScmNil)))),ScmNil)))))
+            end
 
 and make_and rest =
     match rest with
@@ -379,7 +382,7 @@ and make_let rest =
 
                             let values = (List.map (fun arg -> match arg with
                             | ScmPair(ScmSymbol(str),ScmPair(value,ScmNil)) ->  (macro_expand value)
-                            | _ -> raise (X_syntax_error(arg,"sswrong syntax"))) (scm_list_to_list args)) in
+                            | _ -> raise (X_syntax_error(arg,"wrong syntax"))) (scm_list_to_list args)) in
 
                             ScmPair(ScmPair(ScmSymbol("lambda"),ScmPair((list_to_proper_list argus),bodies))
                             ,(list_to_proper_list values))
@@ -428,4 +431,7 @@ and make_letrec rest =
                             end
                             
     | _ -> raise (X_syntax_error(rest,"wrong syntax"))
+
+
+
 end;;
