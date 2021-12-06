@@ -436,15 +436,14 @@ and make_letrec rest =
 and make_quasiquote rest =
     match rest with
       | ScmNil ->  ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
-      | ScmSymbol(a)-> ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
+      | ScmSymbol(str)-> ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
+      | ScmVector(lst) -> ScmPair(ScmSymbol "list->vector",ScmPair((make_quasiquote (list_to_proper_list lst)),ScmNil))
       | ScmPair(ScmSymbol ("unquote"),ScmPair(sexpr,ScmNil)) -> sexpr
       | ScmPair(ScmSymbol ("unquote-splicing"),ScmPair(sexpr,ScmNil)) -> ScmPair(ScmSymbol("quote"),ScmPair(rest,ScmNil))
-      | ScmVector(a) ->  let pairs = (make_quasiquote (list_to_proper_list a)) in
-                      ScmPair(ScmSymbol "list->vector",ScmPair(pairs,ScmNil))
-      | ScmPair((ScmPair((ScmSymbol("unquote-splicing")), (ScmPair(a, ScmNil)))), b) -> 
-              (ScmPair((ScmSymbol("append")),(ScmPair(a, (ScmPair((make_quasiquote b), ScmNil))))))
-      | ScmPair(a, (ScmPair((ScmSymbol("unquote-splicing")), (ScmPair(b, ScmNil))))) ->
-              (ScmPair((ScmSymbol("cons")), (ScmPair((make_quasiquote a), (ScmPair(b, ScmNil))))))
-      | ScmPair(a,b) -> (ScmPair((ScmSymbol("cons")), (ScmPair((make_quasiquote a), (ScmPair((make_quasiquote b), ScmNil))))))
+      | ScmPair((ScmPair((ScmSymbol("unquote-splicing")), (ScmPair(sexpr1, ScmNil)))), sexpr2) -> 
+              (ScmPair((ScmSymbol("append")),(ScmPair(sexpr1, (ScmPair((make_quasiquote sexpr2), ScmNil))))))
+      | ScmPair(sexpr1, (ScmPair((ScmSymbol("unquote-splicing")), (ScmPair(sexpr2, ScmNil))))) ->
+              (ScmPair((ScmSymbol("cons")), (ScmPair((make_quasiquote sexpr1), (ScmPair(sexpr2, ScmNil))))))
+      | ScmPair(sexpr1,sexpr2) -> (ScmPair((ScmSymbol("cons")), (ScmPair((make_quasiquote sexpr1), (ScmPair((make_quasiquote sexpr2), ScmNil))))))
       | _ -> rest
 end;;
