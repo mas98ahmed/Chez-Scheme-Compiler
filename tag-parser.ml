@@ -270,7 +270,9 @@ and make_begin_exp sexprs =
     match (scm_is_list sexprs) with
     | true -> begin
                 let lst = scm_list_to_list sexprs in
-                ScmSeq(List.map tag_parse_expression lst)
+                match (List.length lst) with
+                | 1 -> tag_parse_expression (List.hd lst)
+                | _ -> ScmSeq(List.map tag_parse_expression lst)
                 end
     | false -> raise (X_syntax_error(sexprs,"wrong syntax"))
 
@@ -425,8 +427,6 @@ and make_letrec rest =
                                                                     (list_to_proper_list vars) (list_to_proper_list vals)) in
                             
                             let bod = (scm_append vals bod) in
-
-                            (* let a = raise (X_syntax_error(bod,"sa")) in *)
 
                             (macro_expand (ScmPair(ScmSymbol("let"),ScmPair(new_vars,bod))))
                             end
