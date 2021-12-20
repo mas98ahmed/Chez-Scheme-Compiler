@@ -104,8 +104,20 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
 
   (* run this first! *)
   let annotate_lexical_addresses pe = 
-   let rec run pe params env =
-      raise X_not_yet_implemented 
+   let rec run pe params env = begin
+      match pe with
+      | ScmConst(sexpr) -> ScmConst'(sexpr)
+      | ScmVar(str) -> ScmVar'((tag_lexical_address_for_var str params env))
+      | ScmIf(test,dit,dif) -> ScmIf'((run test params env),(run dit params env),(run dif params env))
+      | ScmSeq(exprs) -> ScmSeq'(List.map (fun x -> (run x params env)) exprs)
+      | ScmSet(ScmVar(var),expr) -> ScmSet'((tag_lexical_address_for_var var params env),(run expr params env))
+      | ScmDef(ScmVar(var),value) -> ScmDef'(VarFree(var),(run value params env))
+      | ScmOr(exprs) -> ScmOr'(List.map (fun x -> (run x params env)) exprs)
+      | ScmLambdaSimple(args,body) -> ScmLambdaSimple'(args,(run body args (params::env)))
+      | ScmLambdaOpt(args,variable,body) -> ScmLambdaOpt'(args,variable,(run body (args@[variable]) (params::env)))
+      | ScmApplic(expr,exprs) -> ScmApplic'((run expr params env),(List.map (fun x -> run x params env) exprs))
+      | _ -> raise X_this_should_not_happen
+      end
    in 
    run pe [] [];;
 
