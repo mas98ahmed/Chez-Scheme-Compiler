@@ -132,7 +132,33 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
   (* run this second! *)
   let annotate_tail_calls pe =
    let rec run pe in_tail =
-      raise X_not_yet_implemented 
+      match pe with
+      | ScmConst'(e) -> pe
+      | ScmVar'(e) -> pe
+      | ScmBox'(e) -> pe
+      | ScmBoxGet'(e) -> pe
+      | ScmBoxSet'(e1,e2) -> pe
+      | ScmIf'(test,dit,dif) -> ScmIf'((run test false),(run dit in_tail),(run dif in_tail))
+      | ScmSeq'(lst) -> begin
+                        let first = (List.rev (List.tl (List.rev lst))) in
+                        let last  = (List.hd (List.rev lst)) in
+                        ScmSeq'((List.map (fun x -> (run x false)) first)@[(run last in_tail)] )
+                        end
+      | ScmSet'(var,value) -> ScmSet'(var, (run value false))
+      | ScmDef'(var,value) -> ScmDef'(var, (run value in_tail))
+      | ScmOr'(lst) -> begin
+                        let first = (List.rev (List.tl (List.rev lst))) in
+                        let last  = (List.hd (List.rev lst)) in
+                        ScmOr'((List.map (fun x -> (run x false)) first)@[(run last in_tail)] )
+                        end
+      | ScmLambdaSimple'(args,body) -> ScmLambdaSimple'(args,(run body true))
+      | ScmLambdaOpt'(args,variable,body) -> ScmLambdaOpt'(args,variable,(run body true))
+      | ScmApplic'(expr,exprs) ->begin 
+                                match in_tail with
+                                | true -> ScmApplicTP'((run expr false),(List.map (fun x -> (run x false)) exprs))
+                                | false -> ScmApplic'((run expr false),(List.map (fun x -> (run x false)) exprs))
+                                end
+      | _ -> raise X_this_should_not_happen
    in 
    run pe false;;
 
