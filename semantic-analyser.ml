@@ -163,11 +163,109 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
    run pe false;;
 
   (* boxing *)
+(* ********************************************************************************************************************************************************** *)
+(* reads *)
+  let find_reads name enclosing_lambda expr =
+    let rec find name enclosing_lambda expr = 
+      match expr with
+      | ScmConst'(sexpr) -> []
+      | ScmVar'(arg) -> begin
+                        match arg with
+                        | VarParam(var,minor) -> if var = name then [enclosing_lambda] else []
+                        | VarBound(var,major,minor) -> if var = name then [enclosing_lambda] else []
+                        | _ -> []
+                        end
+      | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
+      | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
+      | ScmSet'(var,value) -> (find name enclosing_lambda value)
+      | ScmDef'(var,value) -> (find name enclosing_lambda value)
+      | ScmOr'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
+      | ScmLambdaSimple'(args,body) -> (find_reads_lambda name enclosing_lambda expr)
+      | ScmLambdaOpt'(args,varaiable,body) -> (find_reads_lambda name enclosing_lambda expr)
+      | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
+      | ScmApplicTP'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
+      | _ -> []
 
-  let find_reads name enclosing_lambda expr = raise X_not_yet_implemented 
+    and find_reads_lambda name enclosing_lambda expr = 
+      match expr with
+      | ScmLambdaSimple'(args,body) -> if (List.mem name args) then [] 
+        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
+              else [])
+      | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then [] 
+        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
+              else []) 
+      | _ ->[]
+  
+(* ********************************************************************************************************************************************************** *)
+(* writes *)
+
+  let find_writes name enclosing_lambda expr =
+    let rec find name enclosing_lambda expr = 
+      match expr with
+      | ScmConst'(sexpr) -> []
+      | ScmVar'(arg) -> []
+      | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
+      | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
+      | ScmSet'(arg,value) -> begin
+                              match arg with
+                              | VarParam(var,minor) -> if var = name then [enclosing_lambda] else []
+                              | VarBound(var,major,minor) -> if var = name then [enclosing_lambda] else []
+                              | _ -> []
+                              end
+      | ScmDef'(var,value) -> (find name enclosing_lambda value)
+      | ScmOr'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
+      | ScmLambdaSimple'(args,body) -> (find_writes_lambda name enclosing_lambda expr)
+      | ScmLambdaOpt'(args,varaiable,body) -> (find_writes_lambda name enclosing_lambda expr)
+      | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
+      | ScmApplicTP'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
+      | _ -> []
+
+    and find_writes_lambda name enclosing_lambda expr = 
+      match expr with
+      | ScmLambdaSimple'(args,body) -> if (List.mem name args) then [] 
+        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
+              else [])
+      | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then [] 
+        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
+              else []) 
+      | _ ->[]  in
+      find name enclosing_lambda expr
 
 
-  let rec box_set expr = raise X_not_yet_implemented
+  let rec box_set expr = 
+    match expr with
+    | ScmConst'(sexpr) -> ScmConst'(sexpr)
+    | ScmVar'(arg) -> ScmVar'(arg)
+    | ScmIf'(test,dit,dif) -> ScmIf'((box_set test),(box_set dit),(box_set dif))
+    | ScmSeq'(lst) -> ScmSeq'((List.map (fun x -> (box_set x)) lst))
+    | ScmSet'(var,value) -> ScmSet'((box_set var),(box_set value))
+    | ScmDef'(var,value) -> ScmDef'(((box_set var),(box_set value)))
+    | ScmOr'(lst) -> ScmOr'((List.map (fun x -> (box_set x)) lst))
+    | ScmLambdaSimple'(args,body) -> handle_lambda expr
+    | ScmLambdaOpt'(args,varaiable,body) -> handle_lambda expr
+    | ScmApplic'(expr,exprs) -> ScmApplic'((box_set expr),((List.map (fun x -> (box_set x)) exprs))) 
+    | ScmApplicTP'(expr,exprs) -> ScmApplicTP'((box_set expr),((List.map (fun x -> (box_set x)) exprs)))
+    | _ -> raise X_this_should_not_happen
+
+    and handle_lambda expr =
+      match expr with
+      | ScmLambdaOpt(args,variable,body) -> begin
+          (List.fold (fun acc cur -> if (check_boxing curr expr) then acc@[curr] else acc) [] (args@[variable])) in
+          make_box_body args_to_box expr
+                                            end
+      | ScmLambdaSimple(args,body) -> begin
+          let args_to_box = (List.fold (fun acc cur -> if (check_boxing curr expr) then acc@[curr] else acc) [] args) in
+          make_box_body args_to_box expr
+                                      end
+      | _ -> raise X_this_should_not_happen
+    
+    and check_boxing name expr =
+      let read = find_reads name expr expr in
+      let write = find_writes name expr expr in
+      if (List.length read) <> (List.length write) then true
+      else (if (expr'_eq (List.hd (List.rev read)) (List.hd (List.rev write))) then false else true)
+
+    and make_box_body args_box expr = raise X_not_yet_implemented
 
   let run_semantics expr =
     box_set
