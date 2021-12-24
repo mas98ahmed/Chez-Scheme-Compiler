@@ -30,6 +30,7 @@ type expr' =
   | ScmApplic' of expr' * (expr' list)
   | ScmApplicTP' of expr' * (expr' list);;
 
+exception X_syntax_erro of (expr' list) * string;;
 
 let var_eq v1 v2 =
 match v1, v2 with
@@ -160,7 +161,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
                                 end
       | _ -> raise X_this_should_not_happen
    in 
-   run pe false;;
+   run pe false
 
   (* boxing *)
 (* ********************************************************************************************************************************************************** *)
@@ -175,6 +176,8 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
                         | VarBound(var,major,minor) -> if var = name then [enclosing_lambda] else []
                         | _ -> []
                         end
+      | ScmBoxGet'(var) -> []
+      | ScmBoxSet'(var,value) -> find name enclosing_lambda value
       | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
       | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmSet'(var,value) -> (find name enclosing_lambda value)
@@ -187,23 +190,26 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | _ -> []
 
     and find_reads_lambda name enclosing_lambda expr = 
-      match expr with
+      (match expr with
       | ScmLambdaSimple'(args,body) -> if (List.mem name args) then [] 
         else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
               else [])
       | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then [] 
         else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
               else []) 
-      | _ ->[]
+      | _ -> []) in
+      find name enclosing_lambda expr
   
 (* ********************************************************************************************************************************************************** *)
 (* writes *)
 
   let find_writes name enclosing_lambda expr =
     let rec find name enclosing_lambda expr = 
-      match expr with
+      (match expr with
       | ScmConst'(sexpr) -> []
       | ScmVar'(arg) -> []
+      | ScmBoxGet'(var) -> []
+      | ScmBoxSet'(var,value) -> find name enclosing_lambda value
       | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
       | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmSet'(arg,value) -> begin
@@ -218,17 +224,17 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmLambdaOpt'(args,varaiable,body) -> (find_writes_lambda name enclosing_lambda expr)
       | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
       | ScmApplicTP'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
-      | _ -> []
+      | _ -> [])
 
     and find_writes_lambda name enclosing_lambda expr = 
-      match expr with
+      (match expr with
       | ScmLambdaSimple'(args,body) -> if (List.mem name args) then [] 
         else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
               else [])
       | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then [] 
         else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
               else []) 
-      | _ ->[]  in
+      | _ ->[] ) in
       find name enclosing_lambda expr
 
 
@@ -236,10 +242,12 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
     match expr with
     | ScmConst'(sexpr) -> ScmConst'(sexpr)
     | ScmVar'(arg) -> ScmVar'(arg)
+    | ScmBoxGet'(var) -> expr
+    | ScmBoxSet'(var,value) -> expr
     | ScmIf'(test,dit,dif) -> ScmIf'((box_set test),(box_set dit),(box_set dif))
     | ScmSeq'(lst) -> ScmSeq'((List.map (fun x -> (box_set x)) lst))
-    | ScmSet'(var,value) -> ScmSet'((box_set var),(box_set value))
-    | ScmDef'(var,value) -> ScmDef'(((box_set var),(box_set value)))
+    | ScmSet'(var,value) -> ScmSet'(var,(box_set value))
+    | ScmDef'(var,value) -> ScmDef'((var,(box_set value)))
     | ScmOr'(lst) -> ScmOr'((List.map (fun x -> (box_set x)) lst))
     | ScmLambdaSimple'(args,body) -> handle_lambda expr
     | ScmLambdaOpt'(args,varaiable,body) -> handle_lambda expr
@@ -249,24 +257,47 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
 
     and handle_lambda expr =
       match expr with
-      | ScmLambdaOpt(args,variable,body) -> begin
-          (List.fold (fun acc cur -> if (check_boxing curr expr) then acc@[curr] else acc) [] (args@[variable])) in
-          make_box_body args_to_box expr
+      | ScmLambdaOpt'(args,variable,body) -> begin
+          let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr body) then acc@[curr] else acc) [] (args@[variable])) in
+          let  lambda_body = make_box_body args_to_box body in
+          if (List.length args_to_box) > 0 then ScmLambdaOpt'(args,variable,ScmSeq'((List.map (fun x -> ScmSet' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) (args@[variable]))),
+             ScmBox' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) (args@[variable])))))) args_to_box)@[lambda_body]))
+             else lambda_body
                                             end
-      | ScmLambdaSimple(args,body) -> begin
-          let args_to_box = (List.fold (fun acc cur -> if (check_boxing curr expr) then acc@[curr] else acc) [] args) in
-          make_box_body args_to_box expr
-                                      end
+      | ScmLambdaSimple'(args,body) -> begin
+          let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr body) then acc@[curr] else acc) [] args) in
+          let lambda_body = make_box_body args_to_box body in
+          if (List.length args_to_box) > 0 then ScmLambdaSimple'(args,ScmSeq'((List.map (fun x -> ScmSet' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) args)),
+             ScmBox' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) args))))) args_to_box)@[lambda_body]))
+              else lambda_body
+                                             end
       | _ -> raise X_this_should_not_happen
     
     and check_boxing name expr =
       let read = find_reads name expr expr in
       let write = find_writes name expr expr in
-      if (List.length read) <> (List.length write) then true
-      else (if (expr'_eq (List.hd (List.rev read)) (List.hd (List.rev write))) then false else true)
+      if (((List.length write) = 0) || ((List.length write) = 0)) then false else 
+      (if (List.length read) <> (List.length write) then true
+      else (if (expr'_eq (List.hd (List.rev read)) (List.hd (List.rev write))) then false else true))
 
-    and make_box_body args_box expr = raise X_not_yet_implemented
-    
+    and make_box_body args_box expr =
+      match expr with
+      | ScmConst'(sexpr) -> ScmConst'(sexpr)
+      | ScmVar'(VarBound(arg,major,minor)) -> if (List.mem arg args_box) then ScmBoxGet'(VarBound(arg,major,minor)) else expr
+      | ScmVar'(VarParam(arg,minor)) -> if (List.mem arg args_box) then ScmBoxGet'(VarParam(arg,minor)) else expr
+      | ScmVar'(VarFree(arg)) -> expr
+      | ScmBoxGet'(var) -> expr
+      | ScmBoxSet'(var,value) -> ScmBoxSet'(var,(make_box_body args_box value))
+      | ScmIf'(test,dit,dif) -> ScmIf'((make_box_body args_box test),(make_box_body args_box dit),(make_box_body args_box dif))
+      | ScmSeq'(lst) -> ScmSeq'((List.map (fun x -> (make_box_body args_box x)) lst))
+      | ScmSet'(var,value) -> ScmSet'(var,(make_box_body args_box value))
+      | ScmDef'(var,value) -> ScmDef'((var,(make_box_body args_box value)))
+      | ScmOr'(lst) -> ScmOr'((List.map (fun x -> (make_box_body args_box x)) lst))
+      | ScmLambdaSimple'(args,body) -> box_set (ScmLambdaSimple'(args,(make_box_body args_box body)))
+      | ScmLambdaOpt'(args,varaiable,body) -> box_set (ScmLambdaOpt'(args,varaiable,(make_box_body args_box body)))
+      | ScmApplic'(expr,exprs) -> ScmApplic'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs))) 
+      | ScmApplicTP'(expr,exprs) -> ScmApplicTP'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs)))
+      | _ -> raise X_this_should_not_happen
 
   let run_semantics expr =
     box_set
