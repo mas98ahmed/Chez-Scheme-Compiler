@@ -205,7 +205,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
 
   let find_writes name enclosing_lambda expr =
     let rec find name enclosing_lambda expr = 
-      (match expr with
+      match expr with
       | ScmConst'(sexpr) -> []
       | ScmVar'(arg) -> []
       | ScmBoxGet'(var) -> []
@@ -213,6 +213,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
       | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmSet'(arg,value) -> begin
+                              let a = raise (X_syntax_erro([expr],name)) in
                               match arg with
                               | VarParam(var,minor) -> if var = name then [enclosing_lambda] else []
                               | VarBound(var,major,minor) -> if var = name then [enclosing_lambda] else []
@@ -224,7 +225,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmLambdaOpt'(args,varaiable,body) -> (find_writes_lambda name enclosing_lambda expr)
       | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
       | ScmApplicTP'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] exprs))
-      | _ -> [])
+      | _ -> []
 
     and find_writes_lambda name enclosing_lambda expr = 
       (match expr with
@@ -258,25 +259,25 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
     and handle_lambda expr =
       match expr with
       | ScmLambdaOpt'(args,variable,body) -> begin
-          let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr body) then acc@[curr] else acc) [] (args@[variable])) in
+          let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr expr body) then acc@[curr] else acc) [] (args@[variable])) in
           let  lambda_body = make_box_body args_to_box body in
           if (List.length args_to_box) > 0 then ScmLambdaOpt'(args,variable,ScmSeq'((List.map (fun x -> ScmSet' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) (args@[variable]))),
              ScmBox' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) (args@[variable])))))) args_to_box)@[lambda_body]))
              else (ScmLambdaOpt'(args,variable,lambda_body))
-                                            end
+                                        end
       | ScmLambdaSimple'(args,body) -> begin
-          let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr body) then acc@[curr] else acc) [] args) in
+          let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr expr body) then acc@[curr] else acc) [] args) in
           let lambda_body = make_box_body args_to_box body in
           if (List.length args_to_box) > 0 then ScmLambdaSimple'(args,ScmSeq'((List.map (fun x -> ScmSet' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) args)),
              ScmBox' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) args))))) args_to_box)@[lambda_body]))
               else (ScmLambdaSimple'(args,lambda_body))
-                                             end
+                                        end
       | _ -> raise X_this_should_not_happen
     
-    and check_boxing name expr =
-      let read = find_reads name expr expr in
-      let write = find_writes name expr expr in
-      if (((List.length write) = 0) || ((List.length write) = 0)) then false else 
+    and check_boxing name enclosing_lambda expr =
+      let read = find_reads name enclosing_lambda expr in
+      let write = find_writes name enclosing_lambda expr in
+      if (((List.length write) = 0) || ((List.length write) = 0)) then false else
       (if (List.length read) <> (List.length write) then true
       else (if (expr'_eq (List.hd (List.rev read)) (List.hd (List.rev write))) then false else true))
 
