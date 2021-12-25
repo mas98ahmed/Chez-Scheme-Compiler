@@ -243,7 +243,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
     | ScmConst'(sexpr) -> ScmConst'(sexpr)
     | ScmVar'(arg) -> ScmVar'(arg)
     | ScmBoxGet'(var) -> expr
-    | ScmBoxSet'(var,value) -> expr
+    | ScmBoxSet'(var,value) -> ScmBoxSet'(var,box_set value)
     | ScmIf'(test,dit,dif) -> ScmIf'((box_set test),(box_set dit),(box_set dif))
     | ScmSeq'(lst) -> ScmSeq'((List.map (fun x -> (box_set x)) lst))
     | ScmSet'(var,value) -> ScmSet'(var,(box_set value))
@@ -262,14 +262,14 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
           let  lambda_body = make_box_body args_to_box body in
           if (List.length args_to_box) > 0 then ScmLambdaOpt'(args,variable,ScmSeq'((List.map (fun x -> ScmSet' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) (args@[variable]))),
              ScmBox' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) (args@[variable])))))) args_to_box)@[lambda_body]))
-             else lambda_body
+             else (ScmLambdaOpt'(args,variable,lambda_body))
                                             end
       | ScmLambdaSimple'(args,body) -> begin
           let args_to_box = (List.fold_left (fun acc curr -> if (check_boxing curr body) then acc@[curr] else acc) [] args) in
           let lambda_body = make_box_body args_to_box body in
           if (List.length args_to_box) > 0 then ScmLambdaSimple'(args,ScmSeq'((List.map (fun x -> ScmSet' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) args)),
              ScmBox' (VarParam (x, (List.fold_left (fun acc curr -> if curr = x then acc+1 else acc) (-1) args))))) args_to_box)@[lambda_body]))
-              else lambda_body
+              else (ScmLambdaSimple'(args,lambda_body))
                                              end
       | _ -> raise X_this_should_not_happen
     
@@ -290,11 +290,16 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmBoxSet'(var,value) -> ScmBoxSet'(var,(make_box_body args_box value))
       | ScmIf'(test,dit,dif) -> ScmIf'((make_box_body args_box test),(make_box_body args_box dit),(make_box_body args_box dif))
       | ScmSeq'(lst) -> ScmSeq'((List.map (fun x -> (make_box_body args_box x)) lst))
-      | ScmSet'(var,value) -> ScmSet'(var,(make_box_body args_box value))
+      | ScmSet'(var,value) -> begin
+                              match var with
+                              | VarBound(arg,major,minor) -> if (List.mem arg args_box) then ScmBoxSet'(var,(make_box_body args_box value)) else ScmSet'(var,(make_box_body args_box value))
+                              | VarParam(arg,minor) -> if (List.mem arg args_box) then ScmBoxSet'(var,(make_box_body args_box value)) else ScmSet'(var,(make_box_body args_box value))
+                              | VarFree(arg) -> if (List.mem arg args_box) then ScmBoxSet'(var,(make_box_body args_box value)) else ScmSet'(var,(make_box_body args_box value))
+                              end
       | ScmDef'(var,value) -> ScmDef'((var,(make_box_body args_box value)))
       | ScmOr'(lst) -> ScmOr'((List.map (fun x -> (make_box_body args_box x)) lst))
-      | ScmLambdaSimple'(args,body) -> box_set (ScmLambdaSimple'(args,(make_box_body args_box body)))
-      | ScmLambdaOpt'(args,varaiable,body) -> box_set (ScmLambdaOpt'(args,varaiable,(make_box_body args_box body)))
+      | ScmLambdaSimple'(args,body) -> handle_lambda (ScmLambdaSimple'(args,(make_box_body args_box body)))
+      | ScmLambdaOpt'(args,varaiable,body) -> handle_lambda (ScmLambdaOpt'(args,varaiable,(make_box_body args_box body)))
       | ScmApplic'(expr,exprs) -> ScmApplic'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs))) 
       | ScmApplicTP'(expr,exprs) -> ScmApplicTP'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs)))
       | _ -> raise X_this_should_not_happen
