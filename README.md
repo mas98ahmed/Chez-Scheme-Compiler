@@ -2,6 +2,7 @@
 
 ## Git
 
+
 You'll be implementing this (and future) assignments by adding code to a Git repository. The first thing you need to 
 do is a download and install a copy of [Git](https://git-scm.com/downloads).
 
