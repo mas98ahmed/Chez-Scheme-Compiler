@@ -24,7 +24,7 @@ type expr' =
   | ScmApplic' of expr' * (expr' list)
   | ScmApplicTP' of expr' * (expr' list);;
 
-exception X_syntax_erro of (expr' list) * string;;
+exception X_syntax_erro of int * string;;
 
 let var_eq v1 v2 =
 match v1, v2 with
@@ -174,10 +174,10 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmBoxGet'(var) -> []
       | ScmBoxSet'(var,value) -> find name enclosing_lambda value
       | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
-      | ScmSeq'(lst) -> (List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 acc1) then acc2 else acc2@[curr2]) [] (find name enclosing_lambda curr1))) [] lst)
+      | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmSet'(var,value) -> (find name enclosing_lambda value)
       | ScmDef'(var,value) -> (find name enclosing_lambda value)
-      | ScmOr'(lst) -> (List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 acc1) then acc2 else acc2@[curr2]) [] (find name enclosing_lambda curr1))) [] lst)
+      | ScmOr'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmLambdaSimple'(args,body) -> (find_reads_lambda name enclosing_lambda expr)
       | ScmLambdaOpt'(args,varaiable,body) -> (find_reads_lambda name enclosing_lambda expr)
       | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 (find name enclosing_lambda expr)) then acc2 else (if (List.mem curr2 acc1) then acc2 else acc2@[curr2])) [] (find name enclosing_lambda curr1))) [] exprs))
@@ -206,7 +206,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmBoxGet'(var) -> []
       | ScmBoxSet'(var,value) -> find name enclosing_lambda value
       | ScmIf'(test,dit,dif) -> ((find name enclosing_lambda test)@(find name enclosing_lambda dit)@(find name enclosing_lambda dif))
-      | ScmSeq'(lst) -> (List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 acc1) then acc2 else acc2@[curr2]) [] (find name enclosing_lambda curr1))) [] lst)
+      | ScmSeq'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmSet'(arg,value) -> begin
                               match arg with
                               | VarParam(var,minor) -> if var = name then [enclosing_lambda]@(find name enclosing_lambda value) else (find name enclosing_lambda value)
@@ -214,7 +214,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
                               | _ -> (find name enclosing_lambda value)
                               end
       | ScmDef'(var,value) -> (find name enclosing_lambda value)
-      | ScmOr'(lst) -> (List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 acc1) then acc2 else acc2@[curr2]) [] (find name enclosing_lambda curr1))) [] lst)
+      | ScmOr'(lst) -> (List.fold_left (fun acc curr -> acc@(find name enclosing_lambda curr)) [] lst)
       | ScmLambdaSimple'(args,body) -> (find_writes_lambda name enclosing_lambda expr)
       | ScmLambdaOpt'(args,varaiable,body) -> (find_writes_lambda name enclosing_lambda expr)
       | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 (find name enclosing_lambda expr)) then acc2 else (if (List.mem curr2 acc1) then acc2 else acc2@[curr2])) [] (find name enclosing_lambda curr1))) [] exprs))
@@ -275,7 +275,6 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
     and check_boxing name enclosing_lambda expr =
       let read = find_reads name enclosing_lambda expr in
       let write = find_writes name enclosing_lambda expr in
-      let a = raise (X_syntax_erro(write,name)) in
       if (((List.length write) = 0) || ((List.length read) = 0)) then false else
       (if (List.length read) <> (List.length write) then true
       else (if (List.fold_left (fun acc curr -> acc&&(List.mem curr write) ) true read) then false else true))
