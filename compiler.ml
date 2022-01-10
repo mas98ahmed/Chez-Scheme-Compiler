@@ -35,18 +35,20 @@ let make_prologue consts_tbl fvars_tbl =
     (* Additional rational numebr ops *)
     "numerator", "numerator"; "denominator", "denominator"; "gcd", "gcd";
     (* you can add yours here *)
+     "car", "car"; "cdr", "cdr"; "set-car!","set_car" ;"set-cdr!","set_cdr" ; "cons", "cons" ;"apply","apply"
   ] in
   let make_primitive_closure (prim, label) =
     (* This implementation assumes fvars are addressed by an offset from the label `fvar_tbl`.
        If you use a different addressing scheme (e.g., a label for each fvar), change the 
        addressing here to match. *)
     "MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, " ^ label  ^ ")\n" ^
-      "mov [fvar_tbl+" ^  (string_of_int (List.assoc prim fvars_tbl)) ^ "], rax" in
+      "mov [fvar_tbl+WORD_SIZE*" ^  (string_of_int (List.assoc prim fvars_tbl)) ^ "], rax" in
   let constant_bytes (c, (a, s)) =
     (* Adapt the deconstruction here to your constants data generation scheme.
        This implementation assumes the bytes representing the constants are pre-computed in
        the code-generator and stored in the last column of a three-column constants-table structure *)
     s in
+
 ";;; All the macros and the scheme-object printing procedure
 ;;; are defined in compiler.s
 %include \"compiler.s\"
@@ -126,12 +128,12 @@ try
   let string_to_asts s = List.map Semantic_Analysis.run_semantics
                            (List.map Tag_Parser.tag_parse_expression
                               ((PC.star Reader.nt_sexpr) s 0).found) in
-
-  (* get the filename to compile from the command line args *)
-  let infile = Sys.argv.(1) in  
+  (* get the filename to compile from the command line args *) 
+  let infile = Sys.argv.(1) in
 
   (* load the input file and stdlib *)
-  let code =  (file_to_string "stdlib.scm") ^ (file_to_string infile) in
+  (* (file_to_string "stdlib.scm") ^ *)
+  let code =  (file_to_string infile) in
 
   (* generate asts for all the code *)
   let asts = string_to_asts code in
@@ -148,7 +150,6 @@ try
                         (List.map
                            (fun ast -> (generate ast) ^ "\n\tcall write_sob_if_not_void")
                            asts) in
-
   (* merge everything into a single large string and print it out *)
   print_string ((make_prologue consts_tbl fvars_tbl)  ^ 
                   code_fragment ^ clean_exit ^
