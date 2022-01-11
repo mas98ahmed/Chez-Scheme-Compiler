@@ -4,6 +4,7 @@
    You are not required to use it.
    you are allowed to change it. *)
 exception X_this_should_not_happen;;
+exception X_syntax_error of expr'*string
 
 module type CODE_GEN = sig
   (* This signature assumes the structure of the constants table is
@@ -99,8 +100,8 @@ module Code_Gen : CODE_GEN = struct
       | ScmNumber(ScmReal(num))::tl -> make_constants_table (index + 9) (lst @ [(ScmNumber(ScmReal(num)),(index,"MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")"))]) tl
       (* | ScmVector(lst)::tl -> make_constants_table (index + 9 + ((List.length lst)*8)) (lst @ [(ScmSymbol(str)),(index,"MAKE_LITERAL_VECTOR(const_tbl+"^ (string_of_int (constant_address (ScmString(str)) lst)) ^")")]) tl *)
       | ScmPair(x,y)::tl -> make_constants_table (index + 17) (lst @ [(ScmPair(x,y),(index,"MAKE_LITERAL_PAIR(const_tbl+"^(string_of_int (constant_address x lst)) ^", const_tbl+"^(string_of_int(constant_address y lst))^")"))]) tl
-      | ScmSymbol(str)::tl -> make_constants_table (index + 9) (lst @ [(ScmSymbol(str)),(index,"MAKE_LITERAL_SYMBOL(const_tbl+"^ (string_of_int (constant_address (ScmString(str)) lst)) ^")")]) tl;;
-
+      | ScmSymbol(str)::tl -> make_constants_table (index + 9) (lst @ [(ScmSymbol(str)),(index,"MAKE_LITERAL_SYMBOL(const_tbl+"^ (string_of_int (constant_address (ScmString(str)) lst)) ^")")]) tl
+      | _ -> lst;;
   (**************************)
 
   let make_consts_tbl asts = 
@@ -337,6 +338,7 @@ module Code_Gen : CODE_GEN = struct
   
  
  let rec generate_code env consts_tbl fvars_tbl expr' =
+    (* let a = Printf.printf "ASD\n" in  *)
     match expr' with 
     | ScmConst'(x) -> "mov rax,"^ (const_address x consts_tbl ) ^ "\n" 
     | ScmVar'(VarParam(var,minor))-> "mov rax, qword [rbp + 8*(4 + " ^ (string_of_int(minor))^ ")]" ^ "\n"
