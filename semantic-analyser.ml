@@ -160,8 +160,24 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
   (* boxing *)
 (* ********************************************************************************************************************************************************** *)
 (* reads *)
+     let countWrite = ref 0 ;;
+     let countRead= ref 0 ;;
+     let counterWrites reset=
+        if reset then fun ()->( countWrite:= 0);!countWrite
+                 else fun ()->( countWrite:= !countWrite +1);!countWrite ;;
+     let counterReads reset=
+        if reset then fun ()->( countRead:= 0);!countRead
+                 else fun ()->( countRead:= !countRead +1);!countRead
+      ;;
+
+     let rec check_ancestors var1 var2 =
+        if (var1 =[] || var2 = []) then true
+           else let same_rib = (List.hd var1 = List.hd var2) in
+             if same_rib != true
+             then check_ancestors (List.tl var1) (List.tl var2)
+            else false;;
   let find_reads name enclosing_lambda expr =
-    let rec find name enclosing_lambda expr = 
+    let rec find name enclosing_lambda expr =
       match expr with
       | ScmConst'(sexpr) -> []
       | ScmVar'(arg) -> begin
@@ -183,22 +199,23 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 (find name enclosing_lambda expr)) then acc2 else (if (List.mem curr2 acc1) then acc2 else acc2@[curr2])) [] (find name enclosing_lambda curr1))) [] exprs))
       | ScmApplicTP'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 (find name enclosing_lambda expr)) then acc2 else (if (List.mem curr2 acc1) then acc2 else acc2@[curr2])) [] (find name enclosing_lambda curr1))) [] exprs))
 
-    and find_reads_lambda name enclosing_lambda expr = 
+
+    and find_reads_lambda name enclosing_lambda expr =
       (match expr with
-      | ScmLambdaSimple'(args,body) -> if (List.mem name args) then [] 
-        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
-              else [])
-      | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then [] 
-        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
-              else []) 
+      | ScmLambdaSimple'(args,body) -> if (List.mem name args) then []
+        else (find name ([(counterReads false())] @ enclosing_lambda) body)
+
+      | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then []
+            else (find name ([(counterReads false())] @ enclosing_lambda) body)
+
       | _ -> []) in
       find name enclosing_lambda expr
-  
+
 (* ********************************************************************************************************************************************************** *)
 (* writes *)
 
   let find_writes name enclosing_lambda expr =
-    let rec find name enclosing_lambda expr = 
+    let rec find name enclosing_lambda expr =
       match expr with
       | ScmConst'(sexpr) -> []
       | ScmVar'(arg) -> []
@@ -220,19 +237,18 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmApplic'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 (find name enclosing_lambda expr)) then acc2 else (if (List.mem curr2 acc1) then acc2 else acc2@[curr2])) [] (find name enclosing_lambda curr1))) [] exprs))
       | ScmApplicTP'(expr,exprs) -> ((find name enclosing_lambda expr)@(List.fold_left (fun acc1 curr1 -> acc1@(List.fold_left (fun acc2 curr2 -> if (List.mem curr2 (find name enclosing_lambda expr)) then acc2 else (if (List.mem curr2 acc1) then acc2 else acc2@[curr2])) [] (find name enclosing_lambda curr1))) [] exprs))
 
-    and find_writes_lambda name enclosing_lambda expr = 
+    and find_writes_lambda name enclosing_lambda expr =
       (match expr with
-      | ScmLambdaSimple'(args,body) -> if (List.mem name args) then [] 
-        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
-              else [])
-      | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then [] 
-        else (if (List.length (find name enclosing_lambda body)) > 0 then ([enclosing_lambda]@(find name expr body))
-              else []) 
+      | ScmLambdaSimple'(args,body) -> if (List.mem name args) then []
+        else (find name  ([(counterWrites false())]@ enclosing_lambda) body)
+      | ScmLambdaOpt'(args,variable,body) -> if (List.mem name (args@[variable])) then []
+        else (find name ([(counterWrites false())]@ enclosing_lambda) body)
       | _ ->[] ) in
       find name enclosing_lambda expr
 
 
-  let rec box_set expr = 
+
+  let rec box_set expr =
     match expr with
     | ScmConst'(sexpr) -> ScmConst'(sexpr)
     | ScmVar'(arg) -> ScmVar'(arg)
@@ -246,7 +262,7 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
     | ScmOr'(lst) -> ScmOr'((List.map (fun x -> (box_set x)) lst))
     | ScmLambdaSimple'(args,body) -> handle_lambda expr
     | ScmLambdaOpt'(args,varaiable,body) -> handle_lambda expr
-    | ScmApplic'(expr,exprs) -> ScmApplic'((box_set expr),((List.map (fun x -> (box_set x)) exprs))) 
+    | ScmApplic'(expr,exprs) -> ScmApplic'((box_set expr),((List.map (fun x -> (box_set x)) exprs)))
     | ScmApplicTP'(expr,exprs) -> ScmApplicTP'((box_set expr),((List.map (fun x -> (box_set x)) exprs)))
 
     and handle_lambda expr =
@@ -266,18 +282,30 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
               else (ScmLambdaSimple'(args,lambda_body))
                                         end
       | _ -> raise X_this_should_not_happen
-    
-    and index_of_arg args name index= 
+
+    and index_of_arg args name index=
       match args with
       | [] -> raise X_this_should_not_happen
       | hd::tl -> if hd = name then index else (index_of_arg tl name (index+1))
 
     and check_boxing name enclosing_lambda expr =
-      let read = find_reads name enclosing_lambda expr in
-      let write = find_writes name enclosing_lambda expr in
-      if (((List.length write) = 0) || ((List.length read) = 0)) then false else
-      (if (List.length read) <> (List.length write) then true
-      else (if (List.fold_left (fun acc curr -> acc&&(List.mem curr write) ) true read) then false else true))
+      let read = find_reads name [] expr in
+      let write = find_writes name [] expr in
+      let reset  = (counterReads true()) + (counterWrites true()) in
+      let pairs_list = intersection read write reset in
+      List.fold_right (fun a b -> (check_common_ancestor a) || b) pairs_list false
+
+
+   and intersection l l' a =
+       List.concat (List.map (fun e -> List.map (fun e' -> (e,e')) l') l)
+
+   and  check_common_ancestor pair =
+             match pair with
+             |([],[]) -> false
+             |(v1,[]) -> true
+             |([],v2) -> true
+             |(v1, v2) -> if((List.hd(List.rev v1)) = (List.hd(List.rev v2))) then false
+               else  check_ancestors (List.tl(List.rev v1)) (List.tl(List.rev v2))
 
     and make_box_body args_box expr =
       match expr with
@@ -300,13 +328,13 @@ module Semantic_Analysis : SEMANTIC_ANALYSIS = struct
       | ScmOr'(lst) -> ScmOr'((List.map (fun x -> (make_box_body args_box x)) lst))
       | ScmLambdaSimple'(args,body) -> handle_lambda (ScmLambdaSimple'(args,(make_box_body (new_args_to_box args_box args) body)))
       | ScmLambdaOpt'(args,variable,body) -> handle_lambda (ScmLambdaOpt'(args,variable,(make_box_body (new_args_to_box args_box (args@[variable])) body)))
-      | ScmApplic'(expr,exprs) -> ScmApplic'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs))) 
+      | ScmApplic'(expr,exprs) -> ScmApplic'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs)))
       | ScmApplicTP'(expr,exprs) -> ScmApplicTP'((make_box_body args_box expr),((List.map (fun x -> (make_box_body args_box x)) exprs)))
-  
-  and new_args_to_box args_box args = 
+
+  and new_args_to_box args_box args =
       match args_box with
       | [] -> []
-      | hd::tl -> if (List.mem hd args) then (new_args_to_box tl args) else hd::(new_args_to_box tl args) 
+      | hd::tl -> if (List.mem hd args) then (new_args_to_box tl args) else hd::(new_args_to_box tl args)
 
   let run_semantics expr =
     box_set
