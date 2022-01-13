@@ -164,11 +164,10 @@ let reserved_word_list =
 
 let rec tag_parse_expression sexpr =
 let sexpr = macro_expand sexpr in
-(* let a = raise (X_syntax_error(sexpr,"tag_parse")) in *)
 match sexpr with
 | ScmNil-> ScmConst(ScmNil)
-| ScmBoolean(_) ->ScmConst(sexpr)
-| ScmChar(_) -> ScmConst(sexpr)
+| ScmBoolean(_) -> ScmConst(sexpr)
+| ScmChar(ch) -> ScmConst(sexpr)
 | ScmNumber(_) -> ScmConst(sexpr)
 | ScmString(_) -> ScmConst(sexpr)
 | ScmPair(ScmSymbol("quote"),ScmPair(sexprs,ScmNil)) -> ScmConst(sexprs)
@@ -179,7 +178,11 @@ match sexpr with
 | ScmPair(ScmSymbol("define") ,sexprs) -> make_define_exp sexprs
 | ScmPair(ScmSymbol("set!") ,sexprs) -> make_set_exp sexprs
 | ScmPair(ScmSymbol("begin") ,sexprs) -> make_begin_exp sexprs
-| ScmPair(hd,tl) -> ScmApplic((tag_parse_expression hd), List.map tag_parse_expression (scm_list_to_list tl))
+| ScmPair(hd,tl) -> begin
+                    match (scm_is_list tl) with
+                    | true -> ScmApplic((tag_parse_expression hd), List.map tag_parse_expression (scm_list_to_list tl))
+                    | false -> ScmConst(sexpr)
+                    end
 (* Implement tag parsing here *)
 | _ -> raise (X_syntax_error (sexpr, "Sexpr structure not recognized"))
                                               

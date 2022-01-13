@@ -24,8 +24,6 @@ type expr' =
   | ScmApplic' of expr' * (expr' list)
   | ScmApplicTP' of expr' * (expr' list);;
 
-exception X_syntax_erro of int * string;;
-
 let var_eq v1 v2 =
 match v1, v2 with
   | VarFree (name1), VarFree (name2) -> String.equal name1 name2

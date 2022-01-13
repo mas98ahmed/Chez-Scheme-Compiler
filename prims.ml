@@ -353,5 +353,112 @@ module Prims : PRIMS = struct
   (* This is the interface of the module. It constructs a large x86 64-bit string using the routines
      defined above. The main compiler pipline code (in compiler.ml) calls into this module to get the
      string of primitive procedures. *)
-  let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops];;
+  let car =
+    let operate= " mov r10, [rbp+4*8]" ^ "\n" ^
+                  " CAR rax, r10" ^ "\n" in
+     make_routine "car" operate ;; 
+  
+  let cdr=
+    let operate= " mov r10, [rbp+4*8]" ^ "\n" ^
+                  " CDR rax, r10" ^ "\n" in
+    make_routine "cdr" operate ;;               
+  
+  let cons=
+    let operate= "mov r10, qword[rbp + 4*8] " ^ "\n" ^
+                  "mov r11, qword[rbp + 5*8]" ^ "\n" ^
+                  "MAKE_PAIR(rax,r10,r11)" ^ "\n" in
+     make_routine "cons" operate ;;
+  
+  let set_car =
+    let operate = "mov r10, qword[rbp + 4*8] " ^ "\n" ^
+                   "mov r11, qword[rbp + 5*8] " ^ "\n" ^
+                   "mov qword[r10 + TYPE_SIZE], r11" ^ "\n" ^
+                   "mov rax, SOB_VOID_ADDRESS" ^ "\n" in
+
+    make_routine "set_car" operate ;;
+  
+  let set_cdr =
+      let operate = "mov r10, qword[rbp + 4*8] " ^ "\n" ^
+                     "mov r11, qword[rbp + 5*8] " ^ "\n" ^
+                     "mov qword[r10 + TYPE_SIZE + WORD_SIZE], r11" ^ "\n" ^
+                     "mov rax, SOB_VOID_ADDRESS" ^ "\n" in
+      make_routine "set_cdr" operate ;;
+
+  let apply =
+    let operate =
+      "xor r11,r11  " ^ "\n" ^ "
+      add r11, qword[rbp+3*8] " ^ "\n" ^ "
+      sub r11, 1  " ^ "\n" ^ "
+      mov r8, PVAR(r11) " ^ "\n" ^ "
+      mov rdx, qword[rbp]     ; saving old rbp " ^ "\n" ^ "
+      xor r15, r15 " ^ "\n" ^ "
+      mov rbx, r8 " ^ "\n" ^ "
+      mov rsi, PVAR(0) " ^ "\n" ^ "
+      cmp rbx, SOB_NIL_ADDRESS " ^ "\n" ^ "
+      je .PT2 " ^ "\n" ^ "
+      xor r10, r10 " ^ "\n" ^ "
+      add r10, SOB_NIL_ADDRESS " ^ "\n" ^ "
+      .REVERSE: " ^ "\n" ^ "
+      xor rbx,rbx " ^ "\n" ^ "
+      CAR rbx,r8 " ^ "\n" ^ " 
+      MAKE_PAIR(rax,rbx,r10) " ^ "\n" ^ " 
+      xor r10, r10 " ^ "\n" ^ "
+      mov r10, rax " ^ "\n" ^ "
+      CDR rax,r8 " ^ "\n" ^ "
+      mov r8, rax " ^ "\n" ^ "
+      cmp rax, SOB_NIL_ADDRESS " ^ "\n" ^ " 
+      jne .REVERSE " ^ "\n" ^ "
+      .PUSHARGS: " ^ "\n" ^ "
+      xor rax,rax " ^ "\n" ^ "
+      CAR rax,r10 " ^ "\n" ^ "
+      push rax " ^ "\n" ^ "
+      CDR rax,r10 " ^ "\n" ^ " 
+      xor r10,r10" ^ "\n" ^ " 
+      add r10,rax" ^ "\n" ^ "
+      inc r15 " ^ "\n" ^ "
+      cmp rax, SOB_NIL_ADDRESS " ^ "\n" ^ "
+      jne .PUSHARGS " ^ "\n" ^ "
+      .PT2:
+      sub r11,1 " ^ "\n" ^ "
+      add r15,r11 " ^ "\n" ^ "
+      cmp r11, 0 " ^ "\n" ^ "
+      je .TAILAPP " ^ "\n" ^ "
+      .PUSHARGS2: " ^ "\n" ^ "
+      push PVAR(r11) " ^ "\n" ^ "
+      dec r11 " ^ "\n" ^ "
+      cmp r11,0 " ^ "\n" ^ "
+      jne .PUSHARGS2 " ^ "\n" ^ "
+      .TAILAPP: " ^ "\n" ^ "
+      push r15 " ^ "\n" ^ "
+      CLOSURE_ENV rax, rsi " ^ "\n" ^ "
+      push rax " ^ "\n" ^ "
+      push PVAR(-3) " ^ "\n" ^ "
+      xor rcx, rcx " ^ "\n" ^ "
+      add rcx,3 " ^ "\n" ^ "
+      add rcx,PVAR(-1) " ^ "\n" ^ "
+      shl rcx,3   " ^ "\n" ^ "
+      xor r10, r10 " ^ "\n" ^ "
+      sub r10, 8 " ^ "\n" ^ "
+      xor rax,rax " ^ "\n" ^ "
+      add rax,3 " ^ "\n" ^ "
+      add rax, r15 " ^ "\n" ^ "
+      .LOPP: " ^ "\n" ^ "
+      mov r14,[rbp+r10] " ^ "\n" ^ "
+      mov [rbp+rcx] ,r14 " ^ "\n" ^ "
+      sub r10, 8 " ^ "\n" ^ "
+      sub rcx, 8 " ^ "\n" ^ "
+      dec rax " ^ "\n" ^ "
+      cmp rax,0 " ^ "\n" ^ "
+      jne .LOPP " ^ "\n" ^ "
+      add rcx, 8 " ^ "\n" ^ "
+      add rcx,rbp " ^ "\n" ^ "
+      mov rsp, rcx " ^ "\n" ^ "
+      mov rbp, rdx        ; getting old rbp "^ "\n"^ 
+      "xor rax, rax  " ^ "\n" ^ "
+      CLOSURE_CODE rax , rsi " ^ "\n" ^ "
+      jmp rax " ^ "\n\n\n" in 
+      make_routine "apply" operate   ;;
+
+
+  let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;car ;cdr;set_car;set_cdr;cons;apply];;
 end;;
