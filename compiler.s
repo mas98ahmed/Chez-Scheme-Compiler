@@ -170,6 +170,15 @@
 	db %1
 %%end_str:
 %endmacro
+
+%macro MAKE_LITERAL_VECTOR 0-*
+	db T_VECTOR
+	dq %0
+%rep %0
+	dq %1
+%rotate 1
+%endrep
+%endmacro
 ;;*********************************************************************
 
 %define MAKE_RATIONAL(r, num, den) \

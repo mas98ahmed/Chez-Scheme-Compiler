@@ -167,9 +167,10 @@ let sexpr = macro_expand sexpr in
 match sexpr with
 | ScmNil-> ScmConst(ScmNil)
 | ScmBoolean(_) -> ScmConst(sexpr)
-| ScmChar(ch) -> ScmConst(sexpr)
+| ScmChar(_) -> ScmConst(sexpr)
 | ScmNumber(_) -> ScmConst(sexpr)
 | ScmString(_) -> ScmConst(sexpr)
+| ScmVector(_) -> ScmConst(sexpr)
 | ScmPair(ScmSymbol("quote"),ScmPair(sexprs,ScmNil)) -> ScmConst(sexprs)
 | ScmSymbol(str)-> make_var str
 | ScmPair(ScmSymbol("if") ,sexprs) -> make_if_exp sexprs

@@ -4,7 +4,7 @@
    You are not required to use it.
    you are allowed to change it. *)
 exception X_this_should_not_happen;;
-exception X_syntax_error of expr'*string
+exception X_syntax_error;;
 
 module type CODE_GEN = sig
   (* This signature assumes the structure of the constants table is
@@ -63,6 +63,18 @@ module Code_Gen : CODE_GEN = struct
                             (get_constants expr) @ List.concat (constants)
     | _ -> [];;
 
+    let rec sublist b e l = 
+      match l with
+      | [] -> raise X_syntax_error
+      | h :: t -> let tail = if e=0 then [] else sublist (b-1) (e-1) t in
+                  if b>0 then tail else h :: tail;;
+
+    let rec expand_vector vector =
+      match vector with
+      | hd::[] ->[]
+      | hd::tl -> (expand_vector tl)@[ScmVector((sublist 0 ((List.length vector)-1) vector))]
+      | _ -> [];;
+    
     let rec expand_constant lst = 
       match lst with
       | ScmSymbol(str):: tl -> (ScmString(str) :: [ScmSymbol(str)]) @ (expand_constant tl)
@@ -70,9 +82,9 @@ module Code_Gen : CODE_GEN = struct
                             let expanded_cdr = expand_constant [y] in 
                             (expanded_car @ expanded_cdr @
                             [x] @ [y] @ [ScmPair(x,y)]) @ (expand_constant tl)
-      (* | ScmVector(lst)::tl -> (List.map (fun x -> expand_constant x) lst)@lst@(expand_constant tl) *)
+      | ScmVector(vector)::tl -> if ((List.length vector) = 1) then ((expand_constant vector)@[ScmVector(vector)]) else ((expand_constant vector)@vector@(expand_vector vector))
       | hd::tl -> hd :: (expand_constant tl)
-      | _ ->[];;
+      | _ -> lst;;
     
   let get_consts_lst x = 
     let consts_lst = get_constants x in 
@@ -87,6 +99,12 @@ module Code_Gen : CODE_GEN = struct
       |[] -> -1
       |(a,(b,c))::tail-> if(a=x) then b else (constant_address x tail);;
 
+  let rec get_vector_assem vector lst= 
+    match vector with
+    | hd::[] -> "const_tbl+"^(string_of_int (constant_address hd lst))
+    | hd::tl -> "const_tbl+"^(string_of_int (constant_address hd lst))^","^(get_vector_assem tl lst)
+    | _ -> ""
+
   let rec make_constants_table index lst consts_lst= 
     match consts_lst with
       | [] -> lst
@@ -98,10 +116,9 @@ module Code_Gen : CODE_GEN = struct
       | ScmString(str)::tl -> make_constants_table (index + 9 + (String.length str)) (lst @ [(ScmString(str),(index,"MAKE_LITERAL_STRING \""^str^"\""))]) tl
       | ScmNumber(ScmRational(num1, num2))::tl -> make_constants_table (index + 17) (lst @ [(ScmNumber(ScmRational (num1, num2)),(index, "MAKE_LITERAL_RATIONAL(" ^ (string_of_int num1)^ "," ^ (string_of_int num2) ^")"))]) tl
       | ScmNumber(ScmReal(num))::tl -> make_constants_table (index + 9) (lst @ [(ScmNumber(ScmReal(num)),(index,"MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")"))]) tl
-      (* | ScmVector(lst)::tl -> make_constants_table (index + 9 + ((List.length lst)*8)) (lst @ [(ScmSymbol(str)),(index,"MAKE_LITERAL_VECTOR(const_tbl+"^ (string_of_int (constant_address (ScmString(str)) lst)) ^")")]) tl *)
-      | ScmPair(x,y)::tl -> make_constants_table (index + 17) (lst @ [(ScmPair(x,y),(index,"MAKE_LITERAL_PAIR(const_tbl+"^(string_of_int (constant_address x lst)) ^", const_tbl+"^(string_of_int(constant_address y lst))^")"))]) tl
+      | ScmPair(x,y)::tl -> make_constants_table (index + 17) (lst @ [(ScmPair(x,y),(index,"MAKE_LITERAL_PAIR(const_tbl+"^(string_of_int (constant_address x lst)) ^", const_tbl+"^(string_of_int (constant_address y lst))^")"))]) tl
       | ScmSymbol(str)::tl -> make_constants_table (index + 9) (lst @ [(ScmSymbol(str)),(index,"MAKE_LITERAL_SYMBOL(const_tbl+"^ (string_of_int (constant_address (ScmString(str)) lst)) ^")")]) tl
-      | _ -> lst;;
+      | ScmVector(vector)::tl -> make_constants_table (index + 9 + (List.length vector)*8) (lst@[(ScmVector(vector),(index,"MAKE_LITERAL_VECTOR "^(get_vector_assem vector lst)))]) tl;;
   (**************************)
 
   let make_consts_tbl asts = 
